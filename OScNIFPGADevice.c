@@ -50,7 +50,10 @@ static OSc_Error NIFPGAOpen(OSc_Device *device)
 
 static OSc_Error NIFPGAClose(OSc_Device *device)
 {
-	return CloseFPGA(device);
+	OSc_Error err = CloseFPGA(device);
+	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
+	WakeConditionVariable(&(GetData(device)->acquisition.acquisitionFinishCondition));
+	return err;
 }
 
 
@@ -100,12 +103,12 @@ static OSc_Error NIFPGAGetBytesPerSample(OSc_Device *device, uint32_t *bytesPerS
 
 static OSc_Error ArmImpl(OSc_Device *device, OSc_Acquisition *acq)
 {
-	InitializeCriticalSection(&(GetData(device)->acquisition.mutex));
+	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	{
 		if (GetData(device)->acquisition.running &&
 			GetData(device)->acquisition.armed)
 		{
-			DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
+			LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 			if (GetData(device)->acquisition.started)
 				return OSc_Error_Acquisition_Running;
 			else
@@ -115,9 +118,8 @@ static OSc_Error ArmImpl(OSc_Device *device, OSc_Acquisition *acq)
 		GetData(device)->acquisition.running = true;
 		GetData(device)->acquisition.armed = false;
 		GetData(device)->acquisition.started = false;
-		WakeAllConditionVariable(&(GetData(device)->acquisition.startStop));
 	}
-	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
+	LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 
 	if (GetData(device)->settingsChanged)
 	{
@@ -127,11 +129,11 @@ static OSc_Error ArmImpl(OSc_Device *device, OSc_Acquisition *acq)
 
 	OSc_Return_If_Error(SetScanParameters(device));
 
-	InitializeCriticalSection(&(GetData(device)->acquisition.mutex));
+	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	{
 		GetData(device)->acquisition.armed = true;
 	}
-	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
+	LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 
 	return OSc_Error_OK;
 }
@@ -145,23 +147,23 @@ static OSc_Error NIFPGAArmScanner(OSc_Device *device, OSc_Acquisition *acq)
 
 static OSc_Error NIFPGAStartScanner(OSc_Device *device, OSc_Acquisition *acq)
 {
-	InitializeCriticalSection(&(GetData(device)->acquisition.mutex));
+	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	{
 		if (!GetData(device)->acquisition.running ||
 			!GetData(device)->acquisition.armed)
 		{
-			DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
+			LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 			return OSc_Error_Not_Armed;
 		}
 		if (GetData(device)->acquisition.started)
 		{
-			DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
+			LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 			return OSc_Error_Acquisition_Running;
 		}
 
 		GetData(device)->acquisition.started = true;
 	}
-	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
+	LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 
 	return RunAcquisitionLoop(device, acq);
 }
@@ -169,7 +171,7 @@ static OSc_Error NIFPGAStartScanner(OSc_Device *device, OSc_Acquisition *acq)
 
 static OSc_Error NIFPGAStopScanner(OSc_Device *device, OSc_Acquisition *acq)
 {
-	return StopAcquisition(device, acq, true);
+	return StopAcquisitionAndWait(device, acq);
 }
 
 
@@ -188,7 +190,7 @@ static OSc_Error NIFPGAStartDetector(OSc_Device *device, OSc_Acquisition *acq)
 
 static OSc_Error NIFPGAStopDetector(OSc_Device *device, OSc_Acquisition *acq)
 {
-	return StopAcquisition(device, acq, true);
+	return StopAcquisitionAndWait(device, acq);
 }
 
 

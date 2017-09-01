@@ -54,7 +54,7 @@ struct OScNIFPGAPrivateData
 	{
 		CRITICAL_SECTION mutex;
 		HANDLE thread;
-		CONDITION_VARIABLE startStop;
+		CONDITION_VARIABLE acquisitionFinishCondition;
 		bool running;
 		bool armed; // Valid when running == true
 		bool started; // Valid when running == true

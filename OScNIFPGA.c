@@ -44,6 +44,7 @@ static OSc_Error DeinitializeNiFpga(void)
 	NiFpga_Status stat = NiFpga_Finalize();
 	if (NiFpga_IsError(stat))
 		return stat; // TODO
+	g_NiFpga_initialized = false;
 	return OSc_Error_OK;
 }
 
@@ -64,7 +65,7 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 
 	InitializeCriticalSection(&(data->acquisition.mutex));
 	data->acquisition.thread = NULL;
-	InitializeConditionVariable(&(data->acquisition.startStop));
+	InitializeConditionVariable(&(data->acquisition.acquisitionFinishCondition));
 	data->acquisition.running = false;
 	data->acquisition.armed = false;
 	data->acquisition.started = false;
@@ -632,6 +633,16 @@ static OSc_Error AcquireFrame(OSc_Device *device, OSc_Acquisition *acq, unsigned
 }
 
 
+static void FinishAcquisition(OSc_Device *device)
+{
+	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
+	GetData(device)->acquisition.running = false;
+	LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
+	CONDITION_VARIABLE *cv = &(GetData(device)->acquisition.acquisitionFinishCondition);
+	WakeAllConditionVariable(cv);
+}
+
+
 static DWORD WINAPI AcquisitionLoop(void *param)
 {
 	OSc_Device *device = (OSc_Device *)param;
@@ -645,7 +656,7 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 		snprintf(msg, OSc_MAX_STR_LEN,
 			"Error during sequence acquisition: %d", (int)stat);
 		OSc_Log_Error(device, msg);
-		StopAcquisition(device, acq, false);
+		FinishAcquisition(device);
 		return 0;
 	}
 
@@ -659,12 +670,12 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 
 	for (int frame = 0; frame < totalFrames; ++frame)
 	{
-		InitializeCriticalSection(&(GetData(device)->acquisition.mutex));
-		{
-			if (GetData(device)->acquisition.stopRequested)
-				break;
-		}
-		DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
+		bool stopRequested;
+		EnterCriticalSection(&(GetData(device)->acquisition.mutex));
+		stopRequested = GetData(device)->acquisition.stopRequested;
+		LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
+		if (stopRequested)
+			break;
 
 		OSc_Error err;
 		if (OSc_Check_Error(err,
@@ -674,7 +685,7 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 			snprintf(msg, OSc_MAX_STR_LEN,
 				"Error during sequence acquisition: %d", (int)err);
 			OSc_Log_Error(device, msg);
-			StopAcquisition(device, acq, false);
+			FinishAcquisition(device);
 			return 0;
 		}
 
@@ -686,18 +697,12 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 			snprintf(msg, OSc_MAX_STR_LEN,
 				"Error during sequence acquisition: %d", (int)stat);
 			OSc_Log_Error(device, msg);
-			StopAcquisition(device, acq, false);
+			FinishAcquisition(device);
 			return 0;
 		}
 	}
 
-	StopAcquisition(device, acq, false);
-
-	InitializeCriticalSection(&(GetData(device)->acquisition.mutex));
-	GetData(device)->acquisition.running = false;
-	WakeAllConditionVariable(&(GetData(device)->acquisition.startStop));
-	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
-
+	FinishAcquisition(device);
 	return 0;
 }
 
@@ -706,44 +711,48 @@ OSc_Error RunAcquisitionLoop(OSc_Device *device, OSc_Acquisition *acq)
 {
 	GetData(device)->acquisition.acquisition = acq;
 	DWORD id;
-	HANDLE thread = CreateThread(NULL, 0, AcquisitionLoop, device, 0, &id);
+	GetData(device)->acquisition.thread =
+		CreateThread(NULL, 0, AcquisitionLoop, device, 0, &id);
 	return OSc_Error_OK;
 }
 
 
-OSc_Error StopAcquisition(OSc_Device *device, OSc_Acquisition *acq, bool wait)
+OSc_Error StopAcquisitionAndWait(OSc_Device *device, OSc_Acquisition *acq)
 {
-	GetData(device)->acquisition.acquisition = acq;
-	DWORD id;
-	HANDLE thread = CreateThread(NULL, 0, AcquisitionLoop, device, 0, &id);
-	return OSc_Error_OK;
-
-	InitializeCriticalSection(&(GetData(device)->acquisition.mutex));
+	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	{
 		if (!GetData(device)->acquisition.running)
+		{
+			LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 			return OSc_Error_OK;
+		}
 
 		GetData(device)->acquisition.stopRequested = true;
 	}
-	if (wait)
-		WaitForSingleObject(GetData(device)->acquisition.thread, INFINITE);
-	return OSc_Error_OK;
+	LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
+	return WaitForAcquisitionToFinish(device);
 }
 
 
 OSc_Error IsAcquisitionRunning(OSc_Device *device, bool *isRunning)
 {
-	InitializeCriticalSection(&(GetData(device)->acquisition.mutex));
+	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	*isRunning = GetData(device)->acquisition.running;
-	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
+	LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 	return OSc_Error_OK;
 }
 
 
 OSc_Error WaitForAcquisitionToFinish(OSc_Device *device)
 {
-	if (SleepConditionVariableCS(&(GetData(device)->acquisition.startStop),
-		&(GetData(device)->acquisition.mutex), INFINITE))
-		return OSc_Error_OK;
-	return OSc_Error_Unknown;
+	OSc_Error err = OSc_Error_OK;
+	CONDITION_VARIABLE *cv = &(GetData(device)->acquisition.acquisitionFinishCondition);
+
+	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
+	while (GetData(device)->acquisition.running)
+	{
+		SleepConditionVariableCS(cv, &(GetData(device)->acquisition.mutex), INFINITE);
+	}
+	LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
+	return err;
 }
