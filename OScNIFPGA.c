@@ -593,8 +593,8 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			kalmanBuffer[i] = (uint16_t)(rawAndAveraged[i] >> 16);
 		}
 
-		acq->frameCallback(acq, 0, imageBuffer);
-		acq->frameCallback(acq, 1, kalmanBuffer);
+		acq->frameCallback(acq, 0, imageBuffer, acq->data);
+		acq->frameCallback(acq, 1, kalmanBuffer, acq->data);
 	}
 
 	return OSc_Error_OK;
