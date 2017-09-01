@@ -191,6 +191,12 @@ static OSc_Error NIFPGAStopDetector(OSc_Device *device, OSc_Acquisition *acq)
 }
 
 
+static OSc_Error NIFPGAIsRunning(OSc_Device *device, bool *isRunning)
+{
+	return IsAcquisitionRunning(device, isRunning);
+}
+
+
 struct OSc_Device_Impl OpenScan_NIFPGA_Device_Impl = {
 	.GetModelName = NIFPGAGetModelName,
 	.GetInstances = NIFPGAGetInstances,
@@ -210,4 +216,5 @@ struct OSc_Device_Impl OpenScan_NIFPGA_Device_Impl = {
 	.ArmDetector =  NIFPGAArmDetector,
 	.StartDetector = NIFPGAStartDetector,
 	.StopDetector = NIFPGAStopDetector,
+	.IsRunning = NIFPGAIsRunning,
 };

@@ -691,6 +691,11 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 	}
 
 	StopAcquisition(device, acq, false);
+
+	InitializeCriticalSection(&(GetData(device)->acquisition.mutex));
+	GetData(device)->acquisition.running = false;
+	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
+
 	return 0;
 }
 
@@ -705,7 +710,8 @@ OSc_Error RunAcquisitionLoop(OSc_Device *device, OSc_Acquisition *acq)
 
 
 OSc_Error StopAcquisition(OSc_Device *device, OSc_Acquisition *acq, bool wait)
-{	GetData(device)->acquisition.acquisition = acq;
+{
+	GetData(device)->acquisition.acquisition = acq;
 	DWORD id;
 	HANDLE thread = CreateThread(NULL, 0, AcquisitionLoop, device, 0, &id);
 	return OSc_Error_OK;
@@ -719,5 +725,14 @@ OSc_Error StopAcquisition(OSc_Device *device, OSc_Acquisition *acq, bool wait)
 	}
 	if (wait)
 		WaitForSingleObject(GetData(device)->acquisition.thread, INFINITE);
+	return OSc_Error_OK;
+}
+
+
+OSc_Error IsAcquisitionRunning(OSc_Device *device, bool *isRunning)
+{
+	InitializeCriticalSection(&(GetData(device)->acquisition.mutex));
+	*isRunning = GetData(device)->acquisition.running;
+	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
 	return OSc_Error_OK;
 }
