@@ -64,6 +64,7 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 
 	InitializeCriticalSection(&(data->acquisition.mutex));
 	data->acquisition.thread = NULL;
+	InitializeConditionVariable(&(data->acquisition.startStop));
 	data->acquisition.running = false;
 	data->acquisition.armed = false;
 	data->acquisition.started = false;
@@ -694,6 +695,7 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 
 	InitializeCriticalSection(&(GetData(device)->acquisition.mutex));
 	GetData(device)->acquisition.running = false;
+	WakeAllConditionVariable(&(GetData(device)->acquisition.startStop));
 	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
 
 	return 0;
@@ -735,4 +737,13 @@ OSc_Error IsAcquisitionRunning(OSc_Device *device, bool *isRunning)
 	*isRunning = GetData(device)->acquisition.running;
 	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
 	return OSc_Error_OK;
+}
+
+
+OSc_Error WaitForAcquisitionToFinish(OSc_Device *device)
+{
+	if (SleepConditionVariableCS(&(GetData(device)->acquisition.startStop),
+		&(GetData(device)->acquisition.mutex), INFINITE))
+		return OSc_Error_OK;
+	return OSc_Error_Unknown;
 }

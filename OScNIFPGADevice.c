@@ -115,6 +115,7 @@ static OSc_Error ArmImpl(OSc_Device *device, OSc_Acquisition *acq)
 		GetData(device)->acquisition.running = true;
 		GetData(device)->acquisition.armed = false;
 		GetData(device)->acquisition.started = false;
+		WakeAllConditionVariable(&(GetData(device)->acquisition.startStop));
 	}
 	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
 
@@ -197,6 +198,12 @@ static OSc_Error NIFPGAIsRunning(OSc_Device *device, bool *isRunning)
 }
 
 
+static OSc_Error NIFPGAWait(OSc_Device *device)
+{
+	return WaitForAcquisitionToFinish(device);
+}
+
+
 struct OSc_Device_Impl OpenScan_NIFPGA_Device_Impl = {
 	.GetModelName = NIFPGAGetModelName,
 	.GetInstances = NIFPGAGetInstances,
@@ -217,4 +224,5 @@ struct OSc_Device_Impl OpenScan_NIFPGA_Device_Impl = {
 	.StartDetector = NIFPGAStartDetector,
 	.StopDetector = NIFPGAStopDetector,
 	.IsRunning = NIFPGAIsRunning,
+	.Wait = NIFPGAWait,
 };
