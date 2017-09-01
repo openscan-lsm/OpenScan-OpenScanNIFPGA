@@ -12,6 +12,7 @@
 
 
 static bool g_NiFpga_initialized = false;
+static size_t g_openDeviceCount = 0;
 
 
 static inline uint16_t DoubleToFixed16(double d, int intBits)
@@ -114,6 +115,8 @@ OSc_Error OpenFPGA(OSc_Device *device)
 	if (NiFpga_IsError(stat))
 		return stat; // TODO
 
+	++g_openDeviceCount;
+
 	return OSc_Error_OK;
 }
 
@@ -122,7 +125,6 @@ OSc_Error CloseFPGA(OSc_Device *device)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
-	// TODO Stop acquisition
 	if (session)
 	{
 		// Reset FPGA to close shutter (temporary workaround)
@@ -140,8 +142,9 @@ OSc_Error CloseFPGA(OSc_Device *device)
 			return stat; // TODO Wrap
 	}
 
-	// TODO Only do this if this is the last open device
-	OSc_Return_If_Error(DeinitializeNiFpga());
+	--g_openDeviceCount;
+	if (g_openDeviceCount == 0)
+		OSc_Return_If_Error(DeinitializeNiFpga());
 
 	return OSc_Error_OK;
 }
