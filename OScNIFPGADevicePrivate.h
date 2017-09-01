@@ -26,7 +26,7 @@ struct OScNIFPGAPrivateData
 {
 	char rioResourceName[OSc_MAX_STR_LEN + 1];
 	NiFpga_Session niFpgaSession;
-	char bitfile[256];
+	char bitfile[OSc_MAX_STR_LEN + 1];
 
 	OSc_Setting **settings;
 	size_t settingCount;
