@@ -47,6 +47,30 @@ static OSc_Error DeinitializeNiFpga(void)
 }
 
 
+static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
+{
+	strncpy(data->bitfile, NiFpga_OpenScanFPGAHost_Bitfile, OSc_MAX_STR_LEN);
+
+	data->settingsChanged = true;
+	data->scanRate = 0.2;
+	data->resolution = 512;
+	data->zoom = 1.0;
+	data->offsetXY[0] = data->offsetXY[1] = 0.0;
+	data->channels = CHANNELS_RAW_IMAGE;
+	data->kalmanProgressive = false;
+	data->filterGain = 0.99;
+	data->kalmanFrames = 1;
+
+	InitializeCriticalSection(&(data->acquisition.mutex));
+	data->acquisition.thread = NULL;
+	data->acquisition.running = false;
+	data->acquisition.armed = false;
+	data->acquisition.started = false;
+	data->acquisition.stopRequested = false;
+	data->acquisition.acquisition = NULL;
+}
+
+
 OSc_Error EnumerateInstances(OSc_Device ***devices, size_t *deviceCount)
 {
 	OSc_Return_If_Error(EnsureNiFpgaInitialized());
@@ -66,6 +90,8 @@ OSc_Error EnumerateInstances(OSc_Device ***devices, size_t *deviceCount)
 		OSc_Log_Error(NULL, msg);
 		return err; // TODO
 	}
+
+	PopulateDefaultParameters(GetData(device));
 
 	*devices = malloc(sizeof(OSc_Device *));
 	*deviceCount = 1;
