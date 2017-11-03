@@ -71,10 +71,11 @@ static OSc_Error NIFPGAHasDetector(OSc_Device *device, bool *hasDetector)
 }
 
 
-static OSc_Error NIFPGAGetSettings(OSc_Device *device, OSc_Setting ***settings)
+static OSc_Error NIFPGAGetSettings(OSc_Device *device, OSc_Setting ***settings, size_t *count)
 {
 	OSc_Return_If_Error(PrepareSettings(device));
 	*settings = GetData(device)->settings;
+	*count = GetData(device)->settingCount;
 	return OSc_Error_OK;
 }
 
