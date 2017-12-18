@@ -48,43 +48,6 @@ static struct OSc_Setting_Impl SettingImpl_ScanRate = {
 };
 
 
-static OSc_Error GetResolution(OSc_Setting *setting, int32_t *value)
-{
-	*value = GetData(setting->device)->resolution;
-	return OSc_Error_OK;
-}
-
-
-static OSc_Error SetResolution(OSc_Setting *setting, int32_t value)
-{
-	GetData(setting->device)->resolution = value;
-	GetData(setting->device)->settingsChanged = true;
-	return OSc_Error_OK;
-}
-
-
-static OSc_Error GetResolutionValues(OSc_Setting *setting, int32_t **values, size_t *count)
-{
-	static int32_t v[] = {
-		256,
-		512,
-		1024,
-		2048,
-	};
-	*values = v;
-	*count = sizeof(v) / sizeof(int32_t);
-	return OSc_Error_OK;
-}
-
-
-static struct OSc_Setting_Impl SettingImpl_Resolution = {
-	.GetInt32 = GetResolution,
-	.SetInt32 = SetResolution,
-	.GetNumericConstraintType = OSc_Setting_NumericConstraintDiscreteValues,
-	.GetInt32DiscreteValues = GetResolutionValues,
-};
-
-
 static OSc_Error GetZoom(OSc_Setting *setting, double *value)
 {
 	*value = GetData(setting->device)->zoom;
@@ -302,10 +265,6 @@ OSc_Error PrepareSettings(OSc_Device *device)
 	OSc_Return_If_Error(OSc_Setting_Create(&scanRate, device, "ScanRate", OSc_Value_Type_Float64,
 		&SettingImpl_ScanRate, NULL));
 
-	OSc_Setting *resolution;
-	OSc_Return_If_Error(OSc_Setting_Create(&resolution, device, "Resolution", OSc_Value_Type_Int32,
-		&SettingImpl_Resolution, NULL));
-
 	OSc_Setting *zoom;
 	OSc_Return_If_Error(OSc_Setting_Create(&zoom, device, "Zoom", OSc_Value_Type_Float64,
 		&SettingImpl_Zoom, NULL));
@@ -335,7 +294,7 @@ OSc_Error PrepareSettings(OSc_Device *device)
 		&SettingImpl_KalmanFrames, NULL));
 
 	OSc_Setting *ss[] = {
-		scanRate, resolution, zoom, offsetX, offsetY,
+		scanRate, zoom, offsetX, offsetY,
 		channels, kalmanProgressive, filterGain, kalmanFrames,
 	};
 	size_t nSettings = sizeof(ss) / sizeof(OSc_Setting *);

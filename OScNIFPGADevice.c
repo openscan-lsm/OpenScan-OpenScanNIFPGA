@@ -80,6 +80,34 @@ static OSc_Error NIFPGAGetSettings(OSc_Device *device, OSc_Setting ***settings, 
 }
 
 
+static OSc_Error NIFPGAGetAllowedResolutions(OSc_Device *device, size_t **widths, size_t **heights, size_t *count)
+{
+	static size_t resolutions[] = {
+		256, 512, 1024, 2048,
+	};
+	*widths = *heights = resolutions;
+	*count = sizeof(resolutions) / sizeof(size_t);
+	return OSc_Error_OK;
+}
+
+
+static OSc_Error NIFPGAGetResolution(OSc_Device *device, size_t *width, size_t *height)
+{
+	*width = *height = GetData(device)->resolution;
+	return OSc_Error_OK;
+}
+
+
+static OSc_Error NIFPGASetResolution(OSc_Device *device, size_t width, size_t height)
+{
+	if (width == GetData(device)->resolution)
+		return OSc_Error_OK;
+	GetData(device)->resolution = width;
+	GetData(device)->settingsChanged = true;
+	return OSc_Error_OK;
+}
+
+
 static OSc_Error NIFPGAGetImageSize(OSc_Device *device, uint32_t *width, uint32_t *height)
 {
 	*width = GetData(device)->resolution;
@@ -217,6 +245,9 @@ struct OSc_Device_Impl OpenScan_NIFPGA_Device_Impl = {
 	.HasScanner = NIFPGAHasScanner,
 	.HasDetector = NIFPGAHasDetector,
 	.GetSettings = NIFPGAGetSettings,
+	.GetAllowedResolutions = NIFPGAGetAllowedResolutions,
+	.GetResolution = NIFPGAGetResolution,
+	.SetResolution = NIFPGASetResolution,
 	.GetImageSize = NIFPGAGetImageSize,
 	.GetNumberOfChannels = NIFPGAGetNumberOfChannels,
 	.GetBytesPerSample = NIFPGAGetBytesPerSample,
