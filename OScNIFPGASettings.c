@@ -8,20 +8,6 @@
 #include <string.h>
 
 
-static OSc_Error NumericConstraintRange(OSc_Setting *setting, OSc_Value_Constraint *constraintType)
-{
-	*constraintType = OSc_Value_Constraint_Range;
-	return OSc_Error_OK;
-}
-
-
-static OSc_Error NumericConstraintDiscreteValues(OSc_Setting *setting, OSc_Value_Constraint *constraintType)
-{
-	*constraintType = OSc_Value_Constraint_Discrete_Values;
-	return OSc_Error_OK;
-}
-
-
 static OSc_Error GetScanRate(OSc_Setting *setting, double *value)
 {
 	*value = GetData(setting->device)->scanRate;
@@ -57,7 +43,7 @@ static OSc_Error GetScanRateValues(OSc_Setting *setting, double **values, size_t
 static struct OSc_Setting_Impl SettingImpl_ScanRate = {
 	.GetFloat64 = GetScanRate,
 	.SetFloat64 = SetScanRate,
-	.GetNumericConstraintType = NumericConstraintDiscreteValues,
+	.GetNumericConstraintType = OSc_Setting_NumericConstraintDiscreteValues,
 	.GetFloat64DiscreteValues = GetScanRateValues,
 };
 
@@ -94,7 +80,7 @@ static OSc_Error GetResolutionValues(OSc_Setting *setting, int32_t **values, siz
 static struct OSc_Setting_Impl SettingImpl_Resolution = {
 	.GetInt32 = GetResolution,
 	.SetInt32 = SetResolution,
-	.GetNumericConstraintType = NumericConstraintDiscreteValues,
+	.GetNumericConstraintType = OSc_Setting_NumericConstraintDiscreteValues,
 	.GetInt32DiscreteValues = GetResolutionValues,
 };
 
@@ -124,7 +110,7 @@ static OSc_Error GetZoomRange(OSc_Setting *setting, double *min, double *max)
 static struct OSc_Setting_Impl SettingImpl_Zoom = {
 	.GetFloat64 = GetZoom,
 	.SetFloat64 = SetZoom,
-	.GetNumericConstraintType = NumericConstraintRange,
+	.GetNumericConstraintType = OSc_Setting_NumericConstraintRange,
 	.GetFloat64Range = GetZoomRange,
 };
 
@@ -157,7 +143,7 @@ static OSc_Error GetOffsetRange(OSc_Setting *setting, double *min, double *max)
 static struct OSc_Setting_Impl SettingImpl_Offset = {
 	.GetFloat64 = GetOffset,
 	.SetFloat64 = SetOffset,
-	.GetNumericConstraintType = NumericConstraintRange,
+	.GetNumericConstraintType = OSc_Setting_NumericConstraintRange,
 	.GetFloat64Range = GetOffsetRange,
 };
 
@@ -272,7 +258,7 @@ static OSc_Error GetFilterGainRange(OSc_Setting *setting, double *min, double *m
 static struct OSc_Setting_Impl SettingImpl_FilterGain = {
 	.GetFloat64 = GetFilterGain,
 	.SetFloat64 = SetFilterGain,
-	.GetNumericConstraintType = NumericConstraintRange,
+	.GetNumericConstraintType = OSc_Setting_NumericConstraintRange,
 	.GetFloat64Range = GetFilterGainRange,
 };
 
@@ -302,7 +288,7 @@ static OSc_Error GetKalmanFramesRange(OSc_Setting *setting, int32_t *min, int32_
 static struct OSc_Setting_Impl SettingImpl_KalmanFrames = {
 	.GetInt32 = GetKalmanFrames,
 	.SetInt32 = SetKalmanFrames,
-	.GetNumericConstraintType = NumericConstraintRange,
+	.GetNumericConstraintType = OSc_Setting_NumericConstraintRange,
 	.GetInt32Range = GetKalmanFramesRange,
 };
 
@@ -354,10 +340,7 @@ OSc_Error PrepareSettings(OSc_Device *device)
 	};
 	size_t nSettings = sizeof(ss) / sizeof(OSc_Setting *);
 	OSc_Setting **settings = malloc(sizeof(ss));
-	for (size_t i = 0; i < nSettings; ++i)
-	{
-		settings[i] = ss[i];
-	}
+	memcpy(settings, ss, sizeof(ss));
 
 	GetData(device)->settings = settings;
 	GetData(device)->settingCount = nSettings;
