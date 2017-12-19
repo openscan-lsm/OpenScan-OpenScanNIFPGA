@@ -155,11 +155,11 @@ static OSc_Error GetChannelsNameForValue(OSc_Setting *setting, uint32_t value, c
 
 static OSc_Error GetChannelsValueForName(OSc_Setting *setting, uint32_t *value, const char *name)
 {
-	if (!strcmp(name, "Raw Image"))
+	if (!strcmp(name, "RawImage"))
 		*value = CHANNELS_RAW_IMAGE;
-	else if (!strcmp(name, "Kalman Averaged"))
+	else if (!strcmp(name, "KalmanAveraged"))
 		*value = CHANNELS_KALMAN_AVERAGED;
-	else if (!strcmp(name, "Raw and Kalman"))
+	else if (!strcmp(name, "RawAndKalmanAveraged"))
 		*value = CHANNELS_RAW_AND_KALMAN;
 	else
 		return OSc_Error_Unknown;
@@ -283,7 +283,7 @@ OSc_Error PrepareSettings(OSc_Device *device)
 
 	OSc_Setting *kalmanProgressive;
 	OSc_Return_If_Error(OSc_Setting_Create(&kalmanProgressive, device, "KalmanAveragingProgressive", OSc_Value_Type_Bool,
-		&SettingImpl_Channels, NULL));
+		&SettingImpl_KalmanProgressive, NULL));
 
 	OSc_Setting *filterGain;
 	OSc_Return_If_Error(OSc_Setting_Create(&filterGain, device, "KalmanAveragingFilterGain", OSc_Value_Type_Float64,
