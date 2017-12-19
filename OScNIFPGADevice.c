@@ -103,7 +103,7 @@ static OSc_Error NIFPGASetResolution(OSc_Device *device, size_t width, size_t he
 {
 	if (width == GetData(device)->resolution)
 		return OSc_Error_OK;
-	GetData(device)->resolution = width;
+	GetData(device)->resolution = (uint32_t)width;
 	GetData(device)->settingsChanged = true;
 	return OSc_Error_OK;
 }
