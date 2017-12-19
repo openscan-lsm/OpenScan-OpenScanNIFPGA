@@ -50,9 +50,10 @@ static OSc_Error NIFPGAOpen(OSc_Device *device)
 
 static OSc_Error NIFPGAClose(OSc_Device *device)
 {
+	StopAcquisitionAndWait(device, GetData(device)->acquisition.acquisition);
+
 	OSc_Error err = CloseFPGA(device);
 	DeleteCriticalSection(&(GetData(device)->acquisition.mutex));
-	WakeConditionVariable(&(GetData(device)->acquisition.acquisitionFinishCondition));
 	return err;
 }
 
