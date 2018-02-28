@@ -5,6 +5,7 @@
 
 static OSc_Device **g_devices;
 static size_t g_deviceCount;
+static uint32_t n;
 
 
 static OSc_Error NIFPGAGetModelName(const char **name)
@@ -117,7 +118,21 @@ static OSc_Error NIFPGAGetImageSize(OSc_Device *device, uint32_t *width, uint32_
 
 static OSc_Error NIFPGAGetNumberOfChannels(OSc_Device *device, uint32_t *nChannels)
 {
-	*nChannels = GetData(device)->channels == CHANNELS_RAW_AND_KALMAN ? 2 : 1;
+	switch (GetData(device)->channels)
+	{
+	case CHANNELS_1_:
+		*nChannels = 1;
+		break;
+	case CHANNELS_2_:
+		*nChannels = 2;
+		break;
+	case CHANNELS_3_:
+		*nChannels = 3;
+		break;
+	case CHANNELS_4_:
+		*nChannels = 4;
+		break;
+	}
 	return OSc_Error_OK;
 }
 

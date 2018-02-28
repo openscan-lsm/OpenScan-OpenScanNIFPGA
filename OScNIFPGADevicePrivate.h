@@ -39,16 +39,18 @@ struct OScNIFPGAPrivateData
 	double offsetXY[2];
 
 	enum {
-		CHANNELS_RAW_IMAGE,
-		CHANNELS_KALMAN_AVERAGED,
-		CHANNELS_RAW_AND_KALMAN,
+		CHANNELS_1_,
+		CHANNELS_2_,
+		CHANNELS_3_,
+		CHANNELS_4_,
 
 		CHANNELS_NUM_VALUES
 	} channels;
 
 	bool kalmanProgressive;
-	double filterGain;
+	uint16_t filterGain;
 	uint32_t kalmanFrames;
+	uint32_t nFrames;
 
 	struct
 	{

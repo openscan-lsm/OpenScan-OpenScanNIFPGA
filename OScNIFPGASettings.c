@@ -26,11 +26,14 @@ static OSc_Error GetScanRateValues(OSc_Setting *setting, double **values, size_t
 {
 	static double v[] = {
 		0.05,
+		0.08,
 		0.10,
+		0.12,
 		0.15,
 		0.20,
 		0.25,
 		0.30,
+		0.35,
 		0.40,
 		0.50,
 	};
@@ -136,14 +139,17 @@ static OSc_Error GetChannelsNameForValue(OSc_Setting *setting, uint32_t value, c
 {
 	switch (value)
 	{
-	case CHANNELS_RAW_IMAGE:
-		strcpy(name, "RawImage");
+	case CHANNELS_1_:
+		strcpy(name, "Channel 1");
 		break;
-	case CHANNELS_KALMAN_AVERAGED:
-		strcpy(name, "KalmanAveraged");
+	case CHANNELS_2_:
+		strcpy(name, "Channel 1-2");
 		break;
-	case CHANNELS_RAW_AND_KALMAN:
-		strcpy(name, "RawAndKalmanAveraged");
+	case CHANNELS_3_:
+		strcpy(name, "Channel 1-3");
+		break;
+	case CHANNELS_4_:
+		strcpy(name, "Channel 1-4");
 		break;
 	default:
 		strcpy(name, "");
@@ -155,12 +161,14 @@ static OSc_Error GetChannelsNameForValue(OSc_Setting *setting, uint32_t value, c
 
 static OSc_Error GetChannelsValueForName(OSc_Setting *setting, uint32_t *value, const char *name)
 {
-	if (!strcmp(name, "RawImage"))
-		*value = CHANNELS_RAW_IMAGE;
-	else if (!strcmp(name, "KalmanAveraged"))
-		*value = CHANNELS_KALMAN_AVERAGED;
-	else if (!strcmp(name, "RawAndKalmanAveraged"))
-		*value = CHANNELS_RAW_AND_KALMAN;
+	if (!strcmp(name, "Channel 1"))
+		*value = CHANNELS_1_;
+	else if (!strcmp(name, "Channel 1-2"))
+		*value = CHANNELS_2_;
+	else if (!strcmp(name, "Channel 1-3"))
+		*value = CHANNELS_3_;
+	else if (!strcmp(name, "Channel 1-4"))
+		*value = CHANNELS_4_;
 	else
 		return OSc_Error_Unknown;
 	return OSc_Error_OK;

@@ -56,10 +56,10 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 	data->settingsChanged = true;
 	data->scanRate = 0.2;
 	data->resolution = 512;
-	data->zoom = 1.0;
+	data->zoom = 1.25;
 	data->offsetXY[0] = data->offsetXY[1] = 0.0;
-	data->channels = CHANNELS_RAW_IMAGE;
-	data->kalmanProgressive = false;
+	data->channels = CHANNELS_1_;
+	data->kalmanProgressive = true;
 	data->filterGain = 0.99;
 	data->kalmanFrames = 1;
 
@@ -214,7 +214,7 @@ static OSc_Error SetScanRate(OSc_Device *device, double scanRate)
 		NiFpga_OpenScanFPGAHost_ControlI32_Pixeltimetick, pixelTimeTicks);
 	if (NiFpga_IsError(stat))
 		return stat;
-	int32_t pulseWidthTicks = pixelTimeTicks - 21;
+	int32_t pulseWidthTicks = pixelTimeTicks - 4;
 	stat = NiFpga_WriteI32(session,
 		NiFpga_OpenScanFPGAHost_ControlI32_Pixelclock_pulsewidthtick, pulseWidthTicks);
 	if (NiFpga_IsError(stat))
@@ -278,9 +278,6 @@ static OSc_Error InitScan(OSc_Device *device)
 	stat = NiFpga_WriteBool(session, NiFpga_OpenScanFPGAHost_IndicatorBool_Averagedimagedisplayed, false);
 	if (NiFpga_IsError(stat))
 		return stat;
-	stat = NiFpga_WriteBool(session, NiFpga_OpenScanFPGAHost_IndicatorBool_Frameimagingdataaveraged, false);
-	if (NiFpga_IsError(stat))
-		return stat;
 	stat = NiFpga_WriteBool(session, NiFpga_OpenScanFPGAHost_ControlBool_WriteFrameGalvosignal, false);
 	if (NiFpga_IsError(stat))
 		return stat;
@@ -311,11 +308,6 @@ static OSc_Error InitScan(OSc_Device *device)
 static OSc_Error SetKalmanGain(OSc_Device *device, double kg)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
-
-	NiFpga_Status stat = NiFpga_WriteU16(session,
-		NiFpga_OpenScanFPGAHost_ControlU16_Kalmangain, DoubleToFixed16(kg, 1));
-	if (NiFpga_IsError(stat))
-		return stat;
 	return OSc_Error_OK;
 }
 
@@ -325,16 +317,19 @@ OSc_Error SetScanParameters(OSc_Device *device)
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
 	NiFpga_Status stat = NiFpga_WriteI32(session,
-		NiFpga_OpenScanFPGAHost_ControlI32_Numberofframes, 1);
+		NiFpga_OpenScanFPGAHost_ControlI32_Numberofframes, GetData(device)->nFrames);
 	if (NiFpga_IsError(stat))
 		return stat;
-	stat = NiFpga_WriteI32(session, NiFpga_OpenScanFPGAHost_ControlI32_Framenumber, 0);
+	//need to set kalman factor
+	stat = NiFpga_WriteU16(session,
+		NiFpga_OpenScanFPGAHost_ControlU16_Kalmanfactor, GetData(device)->kalmanFrames);
 	if (NiFpga_IsError(stat))
 		return stat;
 
+	GetData(device)->filterGain = 65534;
 	stat = NiFpga_WriteU16(session,
 		NiFpga_OpenScanFPGAHost_ControlU16_Filtergain,
-		DoubleToFixed16(GetData(device)->filterGain, 0));
+		GetData(device)->filterGain);
 	if (NiFpga_IsError(stat))
 		return stat;
 	int err = SetKalmanGain(device, 1.0);
@@ -356,8 +351,9 @@ static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *
 
 	uint32_t elementsPerLine =
 		X_UNDERSHOOT + resolution + X_RETRACE_LEN;
+	uint32_t elementsPerRow = resolution + Y_RETRACE_LEN;
 	uint16_t *xScaled = (uint16_t *)malloc(sizeof(uint16_t) * elementsPerLine);
-	uint16_t *yScaled = (uint16_t *)malloc(sizeof(uint16_t) * resolution);
+	uint16_t *yScaled = (uint16_t *)malloc(sizeof(uint16_t) * elementsPerRow);
 
 	OSc_Error err;
 	if (OSc_Check_Error(err, GenerateScaledWaveforms(resolution, 0.25 * zoom,
@@ -366,17 +362,17 @@ static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *
 
 	NiFpga_Status stat;
 
-	stat = NiFpga_WriteU16(session,
-		NiFpga_OpenScanFPGAHost_ControlU16_Current, FPGA_STATE_WRITE);
-	if (NiFpga_IsError(stat))
-		goto error;
-
 	stat = NiFpga_WriteBool(session,
 		NiFpga_OpenScanFPGAHost_ControlBool_WriteDRAMenable, true);
 	if (NiFpga_IsError(stat))
 		goto error;
 	stat = NiFpga_WriteBool(session,
 		NiFpga_OpenScanFPGAHost_ControlBool_WriteFrameGalvosignal, true);
+	if (NiFpga_IsError(stat))
+		goto error;
+
+	stat = NiFpga_WriteU16(session,
+		NiFpga_OpenScanFPGAHost_ControlU16_Current, FPGA_STATE_WRITE);
 	if (NiFpga_IsError(stat))
 		goto error;
 
@@ -501,7 +497,7 @@ static OSc_Error StartScan(OSc_Device *device)
 
 	// Workaround: Set ReadytoScan to false to acquire only one image
 	NiFpga_Status stat = NiFpga_WriteBool(session,
-		NiFpga_OpenScanFPGAHost_ControlBool_ReadytoScan, false);
+		NiFpga_OpenScanFPGAHost_ControlBool_ReadytoScan, true); // bug fixed
 	if (NiFpga_IsError(stat))
 		return stat;
 
@@ -526,6 +522,93 @@ static OSc_Error StopScan(OSc_Device *device)
 	return OSc_Error_OK;
 }
 
+static OSc_Error CleanFifo(OSc_Device *device)
+{
+	NiFpga_Session session = GetData(device)->niFpgaSession;
+
+	uint32_t resolution = GetData(device)->resolution;
+	size_t nPixels = resolution * resolution;
+
+	uint32_t *clean = malloc(sizeof(uint32_t) * nPixels);
+	size_t readSoFar = 0;
+	size_t available = 0;
+	size_t remaining = 0;
+
+	do
+	{
+		NiFpga_Status stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1,
+			clean + readSoFar, 0, -1, &available);
+		if (NiFpga_IsError(stat))
+			return stat;
+		stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1,
+			clean + readSoFar, available, -1, &remaining);
+		if (NiFpga_IsError(stat))
+			return stat;
+		readSoFar += available;
+	} while (available != 0);
+
+	clean = 0;
+	readSoFar = 0;
+	available = 0;
+	remaining = 0;
+	do
+	{
+		NiFpga_Status stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO2,
+			clean + readSoFar, 0, -1, &available);
+		if (NiFpga_IsError(stat))
+			return stat;
+		stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO2,
+			clean + readSoFar, available, -1, &remaining);
+		if (NiFpga_IsError(stat))
+			return stat;
+		readSoFar += available;
+	} while (available != 0);
+
+	clean = 0;
+	readSoFar = 0;
+	available = 0;
+	remaining = 0;
+	do
+	{
+		NiFpga_Status stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO3,
+			clean + readSoFar, 0, -1, &available);
+		if (NiFpga_IsError(stat))
+			return stat;
+		stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO3,
+			clean + readSoFar, available, -1, &remaining);
+		if (NiFpga_IsError(stat))
+			return stat;
+		readSoFar += available;
+	} while (available != 0);
+
+	clean = 0;
+	readSoFar = 0;
+	available = 0;
+	remaining = 0;
+	do
+	{
+		NiFpga_Status stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO4,
+			clean + readSoFar, 0, -1, &available);
+		if (NiFpga_IsError(stat))
+			return stat;
+		stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO4,
+			clean + readSoFar, available, -1, &remaining);
+		if (NiFpga_IsError(stat))
+			return stat;
+		readSoFar += available;
+	} while (available != 0);
+
+	return OSc_Error_OK;
+}
+
 
 static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discard)
 {
@@ -535,42 +618,210 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 	size_t nPixels = resolution * resolution;
 
 	NiFpga_Status stat = NiFpga_StartFifo(session,
-		NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO);
+		NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1);
 	if (NiFpga_IsError(stat))
 		return stat;
+
+	stat = NiFpga_StartFifo(session,
+		NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO2);
+	if (NiFpga_IsError(stat))
+		return stat;
+
+	stat = NiFpga_StartFifo(session,
+		NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO3);
+	if (NiFpga_IsError(stat))
+		return stat;
+
+	stat = NiFpga_StartFifo(session,
+		NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO4);
+	if (NiFpga_IsError(stat))
+		return stat;
+
 
 	uint32_t* rawAndAveraged = malloc(sizeof(uint32_t) * nPixels);
 	size_t readSoFar = 0;
 	int32_t prevPercentRead = -1;
 	size_t available = 0;
 	size_t remaining = 0;
-	while (readSoFar < nPixels)
+
+	uint32_t* rawAndAveraged2 = malloc(sizeof(uint32_t) * nPixels);
+	size_t readSoFar2 = 0;
+	int32_t prevPercentRead2 = -1;
+	size_t available2 = 0;
+	size_t remaining2 = 0;
+
+	uint32_t* rawAndAveraged3 = malloc(sizeof(uint32_t) * nPixels);
+	size_t readSoFar3 = 0;
+	int32_t prevPercentRead3 = -1;
+	size_t available3 = 0;
+	size_t remaining3 = 0;
+
+	uint32_t* rawAndAveraged4 = malloc(sizeof(uint32_t) * nPixels);
+	size_t readSoFar4 = 0;
+	int32_t prevPercentRead4 = -1;
+	size_t available4 = 0;
+	size_t remaining4 = 0;
+
+	int32_t loopcount = 0;
+
+
+	//Begin reading only when there is data input into FIFO
+	while (!(available && available2 && available3 && available4))
 	{
+		stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1,
+			rawAndAveraged + readSoFar, 0, -1, &available);
+		if (NiFpga_IsError(stat))
+			return stat;
+
+		stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO2,
+			rawAndAveraged2 + readSoFar2, 0, -1, &available2);
+		if (NiFpga_IsError(stat))
+			return stat;
+
+		stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO3,
+			rawAndAveraged3 + readSoFar3, 0, -1, &available3);
+		if (NiFpga_IsError(stat))
+			return stat;
+
+		stat = NiFpga_ReadFifoU32(session,
+			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO4,
+			rawAndAveraged4 + readSoFar4, 0, -1, &available4);
+		if (NiFpga_IsError(stat))
+			return stat;
+
+		Sleep(5);
+	}
+
+	while ((readSoFar < nPixels) || (readSoFar2 < nPixels) || (readSoFar3 < nPixels) || (readSoFar4 < nPixels))
+	{
+		loopcount++;
+		if (loopcount > 1000)
+		{
+			char msg[OSc_MAX_STR_LEN + 1];
+			snprintf(msg, OSc_MAX_STR_LEN, "Read image timeout");
+			OSc_Log_Debug(device, msg);
+			break;
+		}
 		int32_t percentRead = (int32_t)(readSoFar * 100 / nPixels);
+		int32_t percentRead2 = (int32_t)(readSoFar2 * 100 / nPixels);
+		int32_t percentRead3 = (int32_t)(readSoFar3 * 100 / nPixels);
+		int32_t percentRead4 = (int32_t)(readSoFar4 * 100 / nPixels);
+
 		if (percentRead > prevPercentRead)
 		{
 			if (percentRead % 1 == 0)
 			{
 				char msg[OSc_MAX_STR_LEN + 1];
-				snprintf(msg, OSc_MAX_STR_LEN, "Read %d %%", percentRead);
+				snprintf(msg, OSc_MAX_STR_LEN, "Read channel 1 %d %%", percentRead);
 				OSc_Log_Debug(device, msg);
 			}
 			prevPercentRead = percentRead;
 		}
 
-		stat = NiFpga_ReadFifoU32(session,
-			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO,
-			rawAndAveraged + readSoFar, 0, 3000, &available);
-		if (NiFpga_IsError(stat))
-			return stat;
+		if (percentRead2 > prevPercentRead2)
+		{
+			if (percentRead2 % 1 == 0)
+			{
+				char msg[OSc_MAX_STR_LEN + 1];
+				snprintf(msg, OSc_MAX_STR_LEN, "Read channel 2 %d %%", percentRead2);
+				OSc_Log_Debug(device, msg);
+			}
+			prevPercentRead2 = percentRead2;
+		}
 
-		stat = NiFpga_ReadFifoU32(session,
-			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO,
-			rawAndAveraged + readSoFar, available, 3000, &remaining);
-		if (NiFpga_IsError(stat))
-			return stat;
+		if (percentRead3 > prevPercentRead3)
+		{
+			if (percentRead3 % 1 == 0)
+			{
+				char msg[OSc_MAX_STR_LEN + 1];
+				snprintf(msg, OSc_MAX_STR_LEN, "Read channel 3 %d %%", percentRead3);
+				OSc_Log_Debug(device, msg);
+			}
+			prevPercentRead3 = percentRead3;
+		}
 
-		readSoFar += available;
+		if (percentRead4 > prevPercentRead4)
+		{
+			if (percentRead4 % 1 == 0)
+			{
+				char msg[OSc_MAX_STR_LEN + 1];
+				snprintf(msg, OSc_MAX_STR_LEN, "Read channel 4 %d %%", percentRead4);
+				OSc_Log_Debug(device, msg);
+			}
+			prevPercentRead4 = percentRead4;
+		}
+
+		if (readSoFar < nPixels)
+		{
+			stat = NiFpga_ReadFifoU32(session,
+				NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1,
+				rawAndAveraged + readSoFar, 0, 3000, &available);
+			if (NiFpga_IsError(stat))
+				return stat;
+
+			stat = NiFpga_ReadFifoU32(session,
+				NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1,
+				rawAndAveraged + readSoFar, available, 3000, &remaining);
+			if (NiFpga_IsError(stat))
+				return stat;
+
+			readSoFar += available;
+		}
+
+		if (readSoFar2 < nPixels)
+		{
+			stat = NiFpga_ReadFifoU32(session,
+				NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO2,
+				rawAndAveraged2 + readSoFar2, 0, 3000, &available2);
+			if (NiFpga_IsError(stat))
+				return stat;
+
+			stat = NiFpga_ReadFifoU32(session,
+				NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO2,
+				rawAndAveraged2 + readSoFar2, available2, 3000, &remaining2);
+			if (NiFpga_IsError(stat))
+				return stat;
+
+			readSoFar2 += available2;
+		}
+
+		if (readSoFar3 < nPixels)
+		{
+			stat = NiFpga_ReadFifoU32(session,
+				NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO3,
+				rawAndAveraged3 + readSoFar3, 0, 3000, &available3);
+			if (NiFpga_IsError(stat))
+				return stat;
+
+			stat = NiFpga_ReadFifoU32(session,
+				NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO3,
+				rawAndAveraged3 + readSoFar3, available3, 3000, &remaining3);
+			if (NiFpga_IsError(stat))
+				return stat;
+
+			readSoFar3 += available3;
+		}
+
+		if (readSoFar4 < nPixels)
+		{
+			stat = NiFpga_ReadFifoU32(session,
+				NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO4,
+				rawAndAveraged4 + readSoFar4, 0, 3000, &available4);
+			if (NiFpga_IsError(stat))
+				return stat;
+
+			stat = NiFpga_ReadFifoU32(session,
+				NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO4,
+				rawAndAveraged4 + readSoFar4, available4, 3000, &remaining4);
+			if (NiFpga_IsError(stat))
+				return stat;
+
+			readSoFar4 += available4;
+		}
+
 
 		Sleep(5);
 	}
@@ -582,7 +833,22 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 	}
 
 	stat = NiFpga_StopFifo(session,
-		NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO);
+		NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1);
+	if (NiFpga_IsError(stat))
+		return stat;
+
+	stat = NiFpga_StopFifo(session,
+		NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO2);
+	if (NiFpga_IsError(stat))
+		return stat;
+
+	stat = NiFpga_StopFifo(session,
+		NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO3);
+	if (NiFpga_IsError(stat))
+		return stat;
+
+	stat = NiFpga_StopFifo(session,
+		NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO4);
 	if (NiFpga_IsError(stat))
 		return stat;
 
@@ -590,13 +856,32 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 	{
 		uint16_t *imageBuffer = malloc(sizeof(uint16_t) * nPixels);
 		uint16_t *kalmanBuffer = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *imageBuffer2 = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *kalmanBuffer2 = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *imageBuffer3 = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *kalmanBuffer3 = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *imageBuffer4 = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *kalmanBuffer4 = malloc(sizeof(uint16_t) * nPixels);
+
 		for (size_t i = 0; i < nPixels; ++i) {
 			imageBuffer[i] = (uint16_t)(rawAndAveraged[i]);
 			kalmanBuffer[i] = (uint16_t)(rawAndAveraged[i] >> 16);
+			imageBuffer2[i] = (uint16_t)(rawAndAveraged2[i]);
+			kalmanBuffer2[i] = (uint16_t)(rawAndAveraged2[i] >> 16);
+			imageBuffer3[i] = (uint16_t)(rawAndAveraged3[i]);
+			kalmanBuffer3[i] = (uint16_t)(rawAndAveraged3[i] >> 16);
+			imageBuffer4[i] = (uint16_t)(rawAndAveraged4[i]);
+			kalmanBuffer4[i] = (uint16_t)(rawAndAveraged4[i] >> 16);
 		}
 
 		acq->frameCallback(acq, 0, imageBuffer, acq->data);
 		acq->frameCallback(acq, 1, kalmanBuffer, acq->data);
+		acq->frameCallback(acq, 2, imageBuffer2, acq->data);
+		acq->frameCallback(acq, 3, kalmanBuffer2, acq->data);
+		acq->frameCallback(acq, 4, imageBuffer3, acq->data);
+		acq->frameCallback(acq, 5, kalmanBuffer3, acq->data);
+		acq->frameCallback(acq, 6, imageBuffer4, acq->data);
+		acq->frameCallback(acq, 7, kalmanBuffer4, acq->data);
 	}
 
 	return OSc_Error_OK;
@@ -607,27 +892,22 @@ static OSc_Error AcquireFrame(OSc_Device *device, OSc_Acquisition *acq, unsigned
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
-	OSc_Log_Debug(device, "Starting scan...");
-	OSc_Return_If_Error(StartScan(device));
+	OSc_Return_If_Error(SetScanParameters(device));
 
-	OSc_Log_Debug(device, "Waiting for scan to finish...");
-	NiFpga_Bool finished = false;
-	while (!finished)
-	{
-		NiFpga_Status stat = NiFpga_ReadBool(session,
-			NiFpga_OpenScanFPGAHost_IndicatorBool_Frameacquisitionfinish, &finished);
-		if (NiFpga_IsError(stat))
-			return stat;
-		Sleep(10);
-	}
+	OSc_Return_If_Error(StartScan(device));
 
 	bool lastOfKalmanAveraging = GetData(device)->kalmanProgressive ||
 		kalmanCounter + 1 == GetData(device)->kalmanFrames;
 
 	OSc_Log_Debug(device, "Reading image...");
-	OSc_Return_If_Error(ReadImage(device, acq, !lastOfKalmanAveraging));
-	OSc_Return_If_Error(SetKalmanGain(device, 1.0 / (kalmanCounter + 2)));
-	OSc_Log_Debug(device, "Finished reading image");
+	for (unsigned i = 0; i < GetData(device)->kalmanFrames; ++i)
+	{
+		OSc_Return_If_Error(ReadImage(device, acq, !lastOfKalmanAveraging));
+		OSc_Return_If_Error(SetKalmanGain(device, 1.0 / (kalmanCounter + 2)));
+		OSc_Log_Debug(device, "Finished reading image");
+
+	}
+
 
 	return OSc_Error_OK;
 }
@@ -648,18 +928,6 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 	OSc_Device *device = (OSc_Device *)param;
 	OSc_Acquisition *acq = GetData(device)->acquisition.acquisition;
 
-	NiFpga_Status stat = NiFpga_WriteI32(GetData(device)->niFpgaSession,
-		NiFpga_OpenScanFPGAHost_ControlI32_Framenumber, 0);
-	if (NiFpga_IsError(stat))
-	{
-		char msg[OSc_MAX_STR_LEN + 1];
-		snprintf(msg, OSc_MAX_STR_LEN,
-			"Error during sequence acquisition: %d", (int)stat);
-		OSc_Log_Error(device, msg);
-		FinishAcquisition(device);
-		return 0;
-	}
-
 	int totalFrames;
 	if (acq->numberOfFrames == INT32_MAX)
 		totalFrames = INT32_MAX;
@@ -667,6 +935,13 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 		totalFrames = acq->numberOfFrames;
 	else
 		totalFrames = acq->numberOfFrames * GetData(device)->kalmanFrames;
+	
+	GetData(device)->nFrames = totalFrames;
+	
+	OSc_Return_If_Error(SetScanParameters(device));
+
+	OSc_Log_Debug(device, "Starting scan...");
+	OSc_Return_If_Error(StartScan(device));
 
 	for (int frame = 0; frame < totalFrames; ++frame)
 	{
@@ -684,18 +959,6 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 			char msg[OSc_MAX_STR_LEN + 1];
 			snprintf(msg, OSc_MAX_STR_LEN,
 				"Error during sequence acquisition: %d", (int)err);
-			OSc_Log_Error(device, msg);
-			FinishAcquisition(device);
-			return 0;
-		}
-
-		NiFpga_Status stat = NiFpga_WriteI32(GetData(device)->niFpgaSession,
-			NiFpga_OpenScanFPGAHost_ControlI32_Framenumber, frame + 1);
-		if (NiFpga_IsError(stat))
-		{
-			char msg[OSc_MAX_STR_LEN + 1];
-			snprintf(msg, OSc_MAX_STR_LEN,
-				"Error during sequence acquisition: %d", (int)stat);
 			OSc_Log_Error(device, msg);
 			FinishAcquisition(device);
 			return 0;
