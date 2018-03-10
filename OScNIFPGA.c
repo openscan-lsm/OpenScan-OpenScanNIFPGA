@@ -62,6 +62,7 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 	data->kalmanProgressive = true;
 	data->filterGain = 0.99;
 	data->kalmanFrames = 1;
+	data->nFrames = 1;
 
 	InitializeCriticalSection(&(data->acquisition.mutex));
 	data->acquisition.thread = NULL;
