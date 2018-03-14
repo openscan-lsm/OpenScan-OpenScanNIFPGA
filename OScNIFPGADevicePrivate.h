@@ -32,6 +32,7 @@ struct OScNIFPGAPrivateData
 	size_t settingCount;
 
 	bool settingsChanged;
+	bool reloadWaveformRequired;
 
 	double scanRate;
 	uint32_t resolution;

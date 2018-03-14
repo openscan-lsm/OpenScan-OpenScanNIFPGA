@@ -166,11 +166,34 @@ static OSc_Error ArmImpl(OSc_Device *device, OSc_Acquisition *acq)
 
 	if (GetData(device)->settingsChanged)
 	{
-		OSc_Return_If_Error(ReloadWaveform(device));
-		GetData(device)->settingsChanged = false;
-	}
+		OSc_Log_Debug(device, "Setting up new scan...");
+		if (GetData(device)->reloadWaveformRequired)
+		{
+			OSc_Return_If_Error(StartFPGA(device));
+			OSc_Return_If_Error(WaitTillIdle(device));
+		}
+		OSc_Log_Debug(device, "1. Setting parameters...");
+		OSc_Return_If_Error(SetBuildInParameters(device));
+		OSc_Return_If_Error(SetPixelParameters(device,GetData(device)->scanRate));
 
-	OSc_Return_If_Error(SetScanParameters(device));
+		OSc_Log_Debug(device, "2. Clean flags...");
+		OSc_Return_If_Error(Cleanflags(device));
+		OSc_Return_If_Error(SetResolutionParameters(device, GetData(device)->resolution));
+		OSc_Return_If_Error(SetTaskParameters(device, GetData(device)->nFrames));
+
+		OSc_Log_Debug(device, "3. Cleaning FPGA DRAM and initializing globals...");
+		OSc_Return_If_Error(InitScan(device));
+		OSc_Return_If_Error(WaitTillIdle(device));
+
+		if (GetData(device)->reloadWaveformRequired)
+		{
+			OSc_Return_If_Error(ReloadWaveform(device));
+			OSc_Return_If_Error(WaitTillIdle(device));
+		}
+
+		GetData(device)->settingsChanged = false;
+		GetData(device)->reloadWaveformRequired = false;
+	}
 
 	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	{
