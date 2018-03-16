@@ -104,6 +104,8 @@ static OSc_Error NIFPGASetResolution(OSc_Device *device, size_t width, size_t he
 		return OSc_Error_OK;
 	GetData(device)->resolution = (uint32_t)width;
 	GetData(device)->settingsChanged = true;
+	GetData(device)->reloadWaveformRequired = true;
+
 	return OSc_Error_OK;
 }
 

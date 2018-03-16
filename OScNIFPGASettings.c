@@ -18,6 +18,7 @@ static OSc_Error GetScanRate(OSc_Setting *setting, double *value)
 static OSc_Error SetScanRate(OSc_Setting *setting, double value)
 {
 	GetData(setting->device)->scanRate = value;
+	GetData(setting->device)->settingsChanged = true;
 	return OSc_Error_OK;
 }
 
@@ -61,6 +62,8 @@ static OSc_Error GetZoom(OSc_Setting *setting, double *value)
 static OSc_Error SetZoom(OSc_Setting *setting, double value)
 {
 	GetData(setting->device)->zoom = value;
+	GetData(setting->device)->settingsChanged = true;
+	GetData(setting->device)->reloadWaveformRequired = true;
 	return OSc_Error_OK;
 }
 
@@ -91,6 +94,8 @@ static OSc_Error GetOffset(OSc_Setting *setting, double *value)
 static OSc_Error SetOffset(OSc_Setting *setting, double value)
 {
 	GetData(setting->device)->offsetXY[(intptr_t)(setting->implData)] = value;
+	GetData(setting->device)->settingsChanged = true;
+	GetData(setting->device)->reloadWaveformRequired = true;
 	return OSc_Error_OK;
 }
 
@@ -244,6 +249,7 @@ static OSc_Error GetKalmanFrames(OSc_Setting *setting, int32_t *value)
 static OSc_Error SetKalmanFrames(OSc_Setting *setting, int32_t value)
 {
 	GetData(setting->device)->kalmanFrames = value;
+	GetData(setting->device)->settingsChanged = true;
 	return OSc_Error_OK;
 }
 
