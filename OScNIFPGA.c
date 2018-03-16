@@ -361,14 +361,14 @@ static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *
 		0, 0, 10000, &fifoSize);
 
 	uint32_t *xy = (uint32_t *)malloc(sizeof(uint32_t) * elementsPerLine);
-	for (unsigned j = 0; j < resolution; ++j)
+	for (unsigned j = 0; j < elementsPerRow; ++j)
 	{
 		for (unsigned i = 0; i < elementsPerLine; ++i)
 		{
 			xy[i] = ((uint32_t)xScaled[i] << 16) | yScaled[j];
 		}
 
-		NiFpga_Bool dramFull = false;
+		/*NiFpga_Bool dramFull = false;
 		stat = NiFpga_ReadBool(session, NiFpga_OpenScanFPGAHost_IndicatorBool_WriteDRAMdone, &dramFull);
 		if (NiFpga_IsError(stat))
 			goto error;
@@ -380,7 +380,7 @@ static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *
 			OSc_Log_Error(device, msg);
 			stat = OSc_Error_Waveform_Memory_Size_Mismatch;
 			goto error;
-		}
+		}*/
 
 		size_t remaining;
 		stat = NiFpga_WriteFifoU32(session,
@@ -389,7 +389,7 @@ static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *
 		if (NiFpga_IsError(stat))
 			goto error;
 
-		bool done = false;
+		/*bool done = false;
 		while (!done)
 		{
 			stat = NiFpga_WriteFifoU32(session,
@@ -397,12 +397,13 @@ static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *
 				0, 0, 10000, &remaining);
 			if (remaining == fifoSize)
 				done = true;
-		}
+		}*/
+		Sleep(1);
 	}
 
-	Sleep(10);
 
-	NiFpga_Bool dramFull = false;
+
+	/*NiFpga_Bool dramFull = false;
 	stat = NiFpga_ReadBool(session, NiFpga_OpenScanFPGAHost_IndicatorBool_WriteDRAMdone, &dramFull);
 	if (NiFpga_IsError(stat))
 		goto error;
@@ -411,7 +412,7 @@ static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *
 		stat = OSc_Error_Waveform_Memory_Size_Mismatch;
 		OSc_Log_Error(device, "FPGA DRAM not full after writing all lines");
 		goto error;
-	}
+	}*/
 
 	*firstX = xScaled[0];
 	*firstY = yScaled[0];
@@ -456,6 +457,7 @@ OSc_Error ReloadWaveform(OSc_Device *device)
 
 OSc_Error WaitTillIdle(OSc_Device *device)
 {
+	OSc_Log_Debug(device, "Please wait...");
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 	NiFpga_Status stat;
 	uint16_t currentState;
@@ -613,6 +615,7 @@ OSc_Error Cleanflags(OSc_Device *device)
 
 static OSc_Error StartScan(OSc_Device *device)
 {
+	OSc_Log_Debug(device, "Starting scanning...");
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
 	// Workaround: Set ReadytoScan to false to acquire only one image
@@ -633,11 +636,17 @@ static OSc_Error StartScan(OSc_Device *device)
 static OSc_Error StopScan(OSc_Device *device)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
-
+	
+	OSc_Log_Debug(device, "Stopping Scanning...");
 	NiFpga_Status stat = NiFpga_WriteBool(session,
 		NiFpga_OpenScanFPGAHost_ControlBool_ReadytoScan, false);
 	if (NiFpga_IsError(stat))
 		return stat;
+	OSc_Return_If_Error(WaitTillIdle(device));
+
+	/*OSc_Log_Debug(device, "Cleaning Fifo...");
+	OSc_Return_If_Error(CleanFifo(device));
+	OSc_Return_If_Error(WaitTillIdle(device));*/
 
 	return OSc_Error_OK;
 }
@@ -649,7 +658,7 @@ static OSc_Error CleanFifo(OSc_Device *device)
 	uint32_t resolution = GetData(device)->resolution;
 	size_t nPixels = resolution * resolution;
 
-	uint32_t *clean = malloc(sizeof(uint32_t) * nPixels);
+	uint32_t *clean = malloc(sizeof(uint32_t) * nPixels * 4);
 	size_t readSoFar = 0;
 	size_t available = 0;
 	size_t remaining = 0;
@@ -1007,7 +1016,6 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 static OSc_Error AcquireFrame(OSc_Device *device, OSc_Acquisition *acq, unsigned kalmanCounter)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
-
 	OSc_Return_If_Error(StartScan(device));
 
 	bool lastOfKalmanAveraging = GetData(device)->kalmanProgressive ||
@@ -1020,13 +1028,6 @@ static OSc_Error AcquireFrame(OSc_Device *device, OSc_Acquisition *acq, unsigned
 		OSc_Log_Debug(device, "Finished reading image");
 
 	}
-
-	OSc_Log_Debug(device, "Cleaning image...");
-	OSc_Return_If_Error(CleanFifo(device));
-	OSc_Return_If_Error(WaitTillIdle(device));
-
-	OSc_Log_Debug(device, "Stopping image...");
-	OSc_Return_If_Error(StopScan(device));
 
 
 	return OSc_Error_OK;
@@ -1059,8 +1060,8 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 	GetData(device)->nFrames = totalFrames;
 	NiFpga_Status stat = NiFpga_WriteI32(GetData(device)->niFpgaSession,
 		NiFpga_OpenScanFPGAHost_ControlI32_Numberofframes, GetData(device)->nFrames);
-
-	OSc_Log_Debug(device, "Starting scan...");
+	
+	OSc_Log_Debug(device, "Starting acquisition loop...");
 	OSc_Return_If_Error(StartScan(device));
 
 	for (int frame = 0; frame < totalFrames; ++frame)
@@ -1070,7 +1071,13 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 		stopRequested = GetData(device)->acquisition.stopRequested;
 		LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 		if (stopRequested)
+		{
+			OSc_Return_If_Error(StopScan(device));
+			GetData(device)->settingsChanged = true;
+			GetData(device)->reloadWaveformRequired = true;
 			break;
+		}
+
 
 		OSc_Error err;
 		if (OSc_Check_Error(err,
@@ -1085,6 +1092,8 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 		}
 	}
 
+	// GetData(device)->settingsChanged = true;
+	// GetData(device)->reloadWaveformRequired = true;
 	FinishAcquisition(device);
 	return 0;
 }
