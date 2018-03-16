@@ -504,7 +504,7 @@ OSc_Error SetPixelParameters(OSc_Device *device, double scanRate)
 	return OSc_Error_OK;
 }
 
-OSc_Error SetResolutionParameters(OSc_Device *device, uint32_t resolution)
+OSc_Error SetResolutionParameters(OSc_Device *device, uint32_t resolution) 
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 	int32_t elementsPerLine = X_UNDERSHOOT + resolution + X_RETRACE_LEN;
@@ -994,14 +994,10 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			kalmanBuffer4[i] = (uint16_t)(rawAndAveraged4[i] >> 16);
 		}
 
-		acq->frameCallback(acq, 0, imageBuffer, acq->data);
-		acq->frameCallback(acq, 1, kalmanBuffer, acq->data);
-		acq->frameCallback(acq, 2, imageBuffer2, acq->data);
-		acq->frameCallback(acq, 3, kalmanBuffer2, acq->data);
-		acq->frameCallback(acq, 4, imageBuffer3, acq->data);
-		acq->frameCallback(acq, 5, kalmanBuffer3, acq->data);
-		acq->frameCallback(acq, 6, imageBuffer4, acq->data);
-		acq->frameCallback(acq, 7, kalmanBuffer4, acq->data);
+		acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
+		acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
+		acq->frameCallback(acq, 2, kalmanBuffer3, acq->data);
+		acq->frameCallback(acq, 3, kalmanBuffer4, acq->data);
 	}
 
 	return OSc_Error_OK;
@@ -1061,8 +1057,8 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 		totalFrames = acq->numberOfFrames * GetData(device)->kalmanFrames;
 	
 	GetData(device)->nFrames = totalFrames;
-	
-	OSc_Return_If_Error(SetScanParameters(device));
+	NiFpga_Status stat = NiFpga_WriteI32(GetData(device)->niFpgaSession,
+		NiFpga_OpenScanFPGAHost_ControlI32_Numberofframes, GetData(device)->nFrames);
 
 	OSc_Log_Debug(device, "Starting scan...");
 	OSc_Return_If_Error(StartScan(device));
