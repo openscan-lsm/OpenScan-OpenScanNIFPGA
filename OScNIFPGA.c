@@ -1016,7 +1016,7 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 static OSc_Error AcquireFrame(OSc_Device *device, OSc_Acquisition *acq, unsigned kalmanCounter)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
-	OSc_Return_If_Error(StartScan(device));
+	// OSc_Return_If_Error(StartScan(device));
 
 	bool lastOfKalmanAveraging = GetData(device)->kalmanProgressive ||
 		kalmanCounter + 1 == GetData(device)->kalmanFrames;
@@ -1058,8 +1058,9 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 		totalFrames = acq->numberOfFrames * GetData(device)->kalmanFrames;
 	
 	GetData(device)->nFrames = totalFrames;
-	NiFpga_Status stat = NiFpga_WriteI32(GetData(device)->niFpgaSession,
-		NiFpga_OpenScanFPGAHost_ControlI32_Numberofframes, GetData(device)->nFrames);
+
+	OSc_Return_If_Error(SetTaskParameters(device, GetData(device)->nFrames));
+	OSc_Return_If_Error(WaitTillIdle(device));
 	
 	OSc_Log_Debug(device, "Starting acquisition loop...");
 	OSc_Return_If_Error(StartScan(device));
