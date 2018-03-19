@@ -741,6 +741,7 @@ static OSc_Error CleanFifo(OSc_Device *device)
 
 static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discard)
 {
+	OSc_Log_Debug(device, "Reading image...");
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
 	uint32_t resolution = GetData(device)->resolution;
@@ -797,6 +798,15 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 	//Begin reading only when there is data input into FIFO
 	while (!(available && available2 && available3 && available4))
 	{
+		loopcount++;
+		if (loopcount > 5000)
+		{
+			char msg[OSc_MAX_STR_LEN + 1];
+			snprintf(msg, OSc_MAX_STR_LEN, "Scan timeout");
+			OSc_Log_Debug(device, msg);
+			break;
+		}
+
 		stat = NiFpga_ReadFifoU32(session,
 			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1,
 			rawAndAveraged + readSoFar, 0, -1, &available);
@@ -823,6 +833,8 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 
 		Sleep(5);
 	}
+
+	loopcount = 0;
 
 	while ((readSoFar < nPixels) || (readSoFar2 < nPixels) || (readSoFar3 < nPixels) || (readSoFar4 < nPixels))
 	{
@@ -1021,9 +1033,16 @@ static OSc_Error AcquireFrame(OSc_Device *device, OSc_Acquisition *acq, unsigned
 	bool lastOfKalmanAveraging = GetData(device)->kalmanProgressive ||
 		kalmanCounter + 1 == GetData(device)->kalmanFrames;
 
-	OSc_Log_Debug(device, "Reading image...");
+	int thisImage;
+	thisImage = 1;
+
 	for (unsigned i = 0; i < GetData(device)->kalmanFrames; ++i)
 	{
+		char msg[OSc_MAX_STR_LEN + 1];
+		snprintf(msg, OSc_MAX_STR_LEN, "Image %d", thisImage);
+		OSc_Log_Debug(device, msg);
+		thisImage++;
+
 		OSc_Return_If_Error(ReadImage(device, acq, !lastOfKalmanAveraging));
 		OSc_Log_Debug(device, "Finished reading image");
 
@@ -1050,29 +1069,46 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 	OSc_Acquisition *acq = GetData(device)->acquisition.acquisition;
 
 	int totalFrames;
+	int thisFrame;
 	if (acq->numberOfFrames == INT32_MAX)
 		totalFrames = INT32_MAX;
-	else if (GetData(device)->kalmanProgressive)
-		totalFrames = acq->numberOfFrames;
+	//else if (GetData(device)->kalmanProgressive)
+	// 	totalFrames = acq->numberOfFrames * GetData(device)->kalmanFrames;
 	else
 		totalFrames = acq->numberOfFrames * GetData(device)->kalmanFrames;
-	
-	GetData(device)->nFrames = totalFrames;
 
-	OSc_Return_If_Error(SetTaskParameters(device, GetData(device)->nFrames));
+	OSc_Return_If_Error(SetTaskParameters(device, totalFrames));
 	OSc_Return_If_Error(WaitTillIdle(device));
+
+	char msg[OSc_MAX_STR_LEN + 1];
+	snprintf(msg, OSc_MAX_STR_LEN, "%d Kalman images", GetData(device)->kalmanFrames);
+	OSc_Log_Debug(device, msg);
+
+	snprintf(msg, OSc_MAX_STR_LEN, "%d number of frames", acq->numberOfFrames);
+	OSc_Log_Debug(device, msg);
+
+	snprintf(msg, OSc_MAX_STR_LEN, "%d total images", totalFrames);
+	OSc_Log_Debug(device, msg);
 	
 	OSc_Log_Debug(device, "Starting acquisition loop...");
 	OSc_Return_If_Error(StartScan(device));
 
-	for (int frame = 0; frame < totalFrames; ++frame)
+	thisFrame = 1;
+
+	for (int frame = 0; frame < acq->numberOfFrames; ++frame)
 	{
+		char msg[OSc_MAX_STR_LEN + 1];
+		snprintf(msg, OSc_MAX_STR_LEN, "Start frame %d", thisFrame);
+		OSc_Log_Debug(device, msg);
+		thisFrame++;
+
 		bool stopRequested;
 		EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 		stopRequested = GetData(device)->acquisition.stopRequested;
 		LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 		if (stopRequested)
 		{
+			OSc_Log_Debug(device, "User interruption...");
 			OSc_Return_If_Error(StopScan(device));
 			GetData(device)->settingsChanged = true;
 			GetData(device)->reloadWaveformRequired = true;
