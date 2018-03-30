@@ -33,6 +33,8 @@ struct OScNIFPGAPrivateData
 
 	bool settingsChanged;
 	bool reloadWaveformRequired;
+	bool scannerEnabled;
+	bool detectorEnabled;
 
 	double scanRate;
 	uint32_t resolution;

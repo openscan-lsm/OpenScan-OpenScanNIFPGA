@@ -208,6 +208,44 @@ static struct OSc_Setting_Impl SettingImpl_KalmanProgressive = {
 	.SetBool = SetKalmanProgressive,
 };
 
+static OSc_Error GetScannerEnabled(OSc_Setting *setting, bool *value)
+{
+	*value = GetData(setting->device)->scannerEnabled;
+	return OSc_Error_OK;
+}
+
+
+static OSc_Error SetScannerEnabled(OSc_Setting *setting, bool value)
+{
+	GetData(setting->device)->scannerEnabled = value;
+	return OSc_Error_OK;
+}
+
+
+static struct OSc_Setting_Impl SettingImpl_ScannerEnabled = {
+	.GetBool = GetScannerEnabled,
+	.SetBool = SetScannerEnabled,
+};
+
+static OSc_Error GetDetectorEnabled(OSc_Setting *setting, bool *value)
+{
+	*value = GetData(setting->device)->detectorEnabled;
+	return OSc_Error_OK;
+}
+
+
+static OSc_Error SetDetectorEnabled(OSc_Setting *setting, bool value)
+{
+	GetData(setting->device)->detectorEnabled = value;
+	return OSc_Error_OK;
+}
+
+
+static struct OSc_Setting_Impl SettingImpl_DetectorEnabled = {
+	.GetBool = GetDetectorEnabled,
+	.SetBool = SetDetectorEnabled,
+};
+
 
 static OSc_Error GetFilterGain(OSc_Setting *setting, double *value)
 {
@@ -298,6 +336,14 @@ OSc_Error PrepareSettings(OSc_Device *device)
 	OSc_Setting *kalmanProgressive;
 	OSc_Return_If_Error(OSc_Setting_Create(&kalmanProgressive, device, "KalmanAveragingProgressive", OSc_Value_Type_Bool,
 		&SettingImpl_KalmanProgressive, NULL));
+
+	OSc_Setting *scannerEnabled;
+	OSc_Return_If_Error(OSc_Setting_Create(&scannerEnabled, device, "EnableScanner", OSc_Value_Type_Bool,
+		&SettingImpl_ScannerEnabled, NULL));
+
+	OSc_Setting *detectorEnabled;
+	OSc_Return_If_Error(OSc_Setting_Create(&detectorEnabled, device, "EnableDetector", OSc_Value_Type_Bool,
+		&SettingImpl_DetectorEnabled, NULL));
 
 	OSc_Setting *filterGain;
 	OSc_Return_If_Error(OSc_Setting_Create(&filterGain, device, "KalmanAveragingFilterGain", OSc_Value_Type_Float64,
