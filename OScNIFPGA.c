@@ -580,7 +580,6 @@ OSc_Error SetTaskParameters(OSc_Device *device, uint32_t nf)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-
 	return OSc_Error_OK;
 }
 
@@ -752,15 +751,14 @@ static OSc_Error CleanFifo(OSc_Device *device)
 
 static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discard)
 {
-
-	NiFpga_Session session = GetData(device)->niFpgaSession;
-
-	uint32_t resolution = GetData(device)->resolution;
-	size_t nPixels = resolution * resolution;
-
 	if (GetData(device)->detectorEnabled == true)
 	{
 		OSc_Log_Debug(device, "Reading image...");
+		NiFpga_Session session = GetData(device)->niFpgaSession;
+
+		uint32_t resolution = GetData(device)->resolution;
+		size_t nPixels = resolution * resolution;
+
 		NiFpga_Status stat = NiFpga_StartFifo(session,
 			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1);
 		if (NiFpga_IsError(stat))
@@ -1035,11 +1033,10 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			acq->frameCallback(acq, 3, kalmanBuffer4, acq->data);
 		}
 
-
+		return OSc_Error_OK;
 	}
 
-
-	return OSc_Error_OK;
+	
 }
 
 
