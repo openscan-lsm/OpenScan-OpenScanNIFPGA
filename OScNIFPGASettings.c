@@ -218,6 +218,8 @@ static OSc_Error GetScannerEnabled(OSc_Setting *setting, bool *value)
 static OSc_Error SetScannerEnabled(OSc_Setting *setting, bool value)
 {
 	GetData(setting->device)->scannerEnabled = value;
+	GetData(setting->device)->settingsChanged = true;
+	GetData(setting->device)->reloadWaveformRequired = true;
 	return OSc_Error_OK;
 }
 
@@ -237,6 +239,8 @@ static OSc_Error GetDetectorEnabled(OSc_Setting *setting, bool *value)
 static OSc_Error SetDetectorEnabled(OSc_Setting *setting, bool value)
 {
 	GetData(setting->device)->detectorEnabled = value;
+	GetData(setting->device)->settingsChanged = true;
+	GetData(setting->device)->reloadWaveformRequired = true;
 	return OSc_Error_OK;
 }
 
@@ -355,7 +359,7 @@ OSc_Error PrepareSettings(OSc_Device *device)
 
 	OSc_Setting *ss[] = {
 		scanRate, zoom, offsetX, offsetY,
-		channels, kalmanProgressive, filterGain, kalmanFrames,
+		channels, kalmanProgressive, scannerEnabled, detectorEnabled, filterGain, kalmanFrames,
 	};
 	size_t nSettings = sizeof(ss) / sizeof(OSc_Setting *);
 	OSc_Setting **settings = malloc(sizeof(ss));

@@ -61,6 +61,8 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 	data->offsetXY[0] = data->offsetXY[1] = 0.0;
 	data->channels = CHANNELS_1_;
 	data->kalmanProgressive = true;
+	data->detectorEnabled = true;
+	data->scannerEnabled = true;
 	data->filterGain = 0.99;
 	data->kalmanFrames = 1;
 	data->nFrames = 1;
@@ -751,13 +753,17 @@ static OSc_Error CleanFifo(OSc_Device *device)
 
 static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discard)
 {
+	uint32_t resolution = GetData(device)->resolution;
+	size_t nPixels = resolution * resolution;
+	uint32_t* rawAndAveraged = malloc(sizeof(uint32_t) * nPixels);
+	uint32_t* rawAndAveraged2 = malloc(sizeof(uint32_t) * nPixels);
+	uint32_t* rawAndAveraged3 = malloc(sizeof(uint32_t) * nPixels);
+	uint32_t* rawAndAveraged4 = malloc(sizeof(uint32_t) * nPixels);
+
 	if (GetData(device)->detectorEnabled == true)
 	{
 		OSc_Log_Debug(device, "Reading image...");
 		NiFpga_Session session = GetData(device)->niFpgaSession;
-
-		uint32_t resolution = GetData(device)->resolution;
-		size_t nPixels = resolution * resolution;
 
 		NiFpga_Status stat = NiFpga_StartFifo(session,
 			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1);
@@ -780,25 +786,21 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			return stat;
 
 
-		uint32_t* rawAndAveraged = malloc(sizeof(uint32_t) * nPixels);
 		size_t readSoFar = 0;
 		int32_t prevPercentRead = -1;
 		size_t available = 0;
 		size_t remaining = 0;
 
-		uint32_t* rawAndAveraged2 = malloc(sizeof(uint32_t) * nPixels);
 		size_t readSoFar2 = 0;
 		int32_t prevPercentRead2 = -1;
 		size_t available2 = 0;
 		size_t remaining2 = 0;
 
-		uint32_t* rawAndAveraged3 = malloc(sizeof(uint32_t) * nPixels);
 		size_t readSoFar3 = 0;
 		int32_t prevPercentRead3 = -1;
 		size_t available3 = 0;
 		size_t remaining3 = 0;
 
-		uint32_t* rawAndAveraged4 = malloc(sizeof(uint32_t) * nPixels);
 		size_t readSoFar4 = 0;
 		int32_t prevPercentRead4 = -1;
 		size_t available4 = 0;
@@ -1004,6 +1006,7 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO4);
 		if (NiFpga_IsError(stat))
 			return stat;
+	}
 
 		if (!discard)
 		{
@@ -1034,7 +1037,7 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 		}
 
 		return OSc_Error_OK;
-	}
+
 
 	
 }
