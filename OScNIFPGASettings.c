@@ -55,6 +55,10 @@ static struct OSc_Setting_Impl SettingImpl_ScanRate = {
 static OSc_Error GetZoom(OSc_Setting *setting, double *value)
 {
 	*value = GetData(setting->device)->zoom;
+	GetData(setting->device)->magnification = 
+		(double)GetData(setting->device)->resolution / (double)OSc_DEFAULT_RESOLUTION
+		* GetData(setting->device)->zoom / OSc_DEFAULT_ZOOM;
+
 	return OSc_Error_OK;
 }
 
@@ -64,6 +68,12 @@ static OSc_Error SetZoom(OSc_Setting *setting, double value)
 	GetData(setting->device)->zoom = value;
 	GetData(setting->device)->settingsChanged = true;
 	GetData(setting->device)->reloadWaveformRequired = true;
+
+// reflect the change to magnification as well
+	GetData(setting->device)->magnification =
+	(double)GetData(setting->device)->resolution / (double)OSc_DEFAULT_RESOLUTION
+		* value / OSc_DEFAULT_ZOOM;
+
 	return OSc_Error_OK;
 }
 

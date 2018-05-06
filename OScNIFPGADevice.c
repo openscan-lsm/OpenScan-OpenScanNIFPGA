@@ -106,8 +106,26 @@ static OSc_Error NIFPGASetResolution(OSc_Device *device, size_t width, size_t he
 	GetData(device)->settingsChanged = true;
 	GetData(device)->reloadWaveformRequired = true;
 
+	GetData(device)->magnification = (double)width / OSc_DEFAULT_RESOLUTION * GetData(device)->zoom / OSc_DEFAULT_ZOOM;
+
 	return OSc_Error_OK;
 }
+
+static OSc_Error NIFPGAGetMagnification(OSc_Device *device, double *magnification)
+{
+	*magnification = GetData(device)->magnification;
+	return OSc_Error_OK;
+}
+
+static OSc_Error NIFPGASetMagnification(OSc_Device *device)
+{
+	size_t resolution = GetData(device)->resolution;
+	double zoom = GetData(device)->zoom;
+	GetData(device)->magnification = (double)(resolution / OSc_DEFAULT_RESOLUTION) * (zoom / OSc_DEFAULT_ZOOM);
+	
+	return OSc_Error_OK;
+}
+
 
 
 static OSc_Error NIFPGAGetImageSize(OSc_Device *device, uint32_t *width, uint32_t *height)
@@ -287,6 +305,8 @@ struct OSc_Device_Impl OpenScan_NIFPGA_Device_Impl = {
 	.GetAllowedResolutions = NIFPGAGetAllowedResolutions,
 	.GetResolution = NIFPGAGetResolution,
 	.SetResolution = NIFPGASetResolution,
+	.GetMagnification = NIFPGAGetMagnification,
+	.SetMagnification = NIFPGASetMagnification,
 	.GetImageSize = NIFPGAGetImageSize,
 	.GetNumberOfChannels = NIFPGAGetNumberOfChannels,
 	.GetBytesPerSample = NIFPGAGetBytesPerSample,
