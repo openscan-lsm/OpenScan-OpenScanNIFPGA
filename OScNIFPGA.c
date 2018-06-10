@@ -1031,10 +1031,36 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 				kalmanBuffer4[i] = (uint16_t)(rawAndAveraged4[i] >> 16);
 			}
 
-			acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
-			acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
-			acq->frameCallback(acq, 2, kalmanBuffer3, acq->data);
-			acq->frameCallback(acq, 3, kalmanBuffer4, acq->data);
+			switch (GetData(device)->channels)
+			{
+			case CHANNELS_1_:
+				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
+				break;
+
+			case CHANNELS_2_:
+				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
+				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
+				break;
+			
+			case CHANNELS_3_:
+				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
+				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
+				acq->frameCallback(acq, 2, kalmanBuffer3, acq->data);
+				break;
+			
+			case CHANNELS_4_:
+				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
+				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
+				acq->frameCallback(acq, 2, kalmanBuffer3, acq->data);
+				acq->frameCallback(acq, 3, kalmanBuffer4, acq->data);
+				break;
+			
+			default:
+				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
+				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
+				acq->frameCallback(acq, 2, kalmanBuffer3, acq->data);
+				acq->frameCallback(acq, 3, kalmanBuffer4, acq->data);
+			}
 		}
 
 		return OSc_Error_OK;
