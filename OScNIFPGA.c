@@ -1019,6 +1019,10 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			uint16_t *kalmanBuffer3 = malloc(sizeof(uint16_t) * nPixels);
 			uint16_t *imageBuffer4 = malloc(sizeof(uint16_t) * nPixels);
 			uint16_t *kalmanBuffer4 = malloc(sizeof(uint16_t) * nPixels);
+			uint8_t *chan0buffer = malloc(sizeof(uint8_t) * nPixels);
+			uint8_t *chan1buffer = malloc(sizeof(uint8_t) * nPixels);
+			uint8_t *chan2buffer = malloc(sizeof(uint8_t) * nPixels);
+			uint8_t *chan3buffer = malloc(sizeof(uint8_t) * nPixels);
 
 			for (size_t i = 0; i < nPixels; ++i) {
 				imageBuffer[i] = (uint16_t)(rawAndAveraged[i]);
@@ -1031,35 +1035,43 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 				kalmanBuffer4[i] = (uint16_t)(rawAndAveraged4[i] >> 16);
 			}
 
+			for (size_t i = 0; i < nPixels; ++i) {
+				chan0buffer[i] = (uint8_t)(kalmanBuffer[i]);
+				chan1buffer[i] = (uint8_t)(kalmanBuffer2[i]);
+				chan2buffer[i] = (uint8_t)(kalmanBuffer3[i]);
+				chan3buffer[i] = (uint8_t)(kalmanBuffer4[i]);			
+			}
+
+
 			switch (GetData(device)->channels)
 			{
 			case CHANNELS_1_:
-				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
+				acq->frameCallback(acq, 0, chan0buffer, acq->data);
 				break;
 
 			case CHANNELS_2_:
-				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
-				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
+				acq->frameCallback(acq, 0, chan0buffer, acq->data);
+				acq->frameCallback(acq, 1, chan1buffer, acq->data);
 				break;
 			
 			case CHANNELS_3_:
-				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
-				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
-				acq->frameCallback(acq, 2, kalmanBuffer3, acq->data);
+				acq->frameCallback(acq, 0, chan0buffer, acq->data);
+				acq->frameCallback(acq, 1, chan1buffer, acq->data);
+				acq->frameCallback(acq, 2, chan2buffer, acq->data);
 				break;
 			
 			case CHANNELS_4_:
-				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
-				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
-				acq->frameCallback(acq, 2, kalmanBuffer3, acq->data);
-				acq->frameCallback(acq, 3, kalmanBuffer4, acq->data);
+				acq->frameCallback(acq, 0, chan0buffer, acq->data);
+				acq->frameCallback(acq, 1, chan1buffer, acq->data);
+				acq->frameCallback(acq, 2, chan2buffer, acq->data);
+				acq->frameCallback(acq, 3, chan3buffer, acq->data);
 				break;
 			
 			default:
-				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
-				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
-				acq->frameCallback(acq, 2, kalmanBuffer3, acq->data);
-				acq->frameCallback(acq, 3, kalmanBuffer4, acq->data);
+				acq->frameCallback(acq, 0, chan0buffer, acq->data);
+				acq->frameCallback(acq, 1, chan1buffer, acq->data);
+				acq->frameCallback(acq, 2, chan2buffer, acq->data);
+				acq->frameCallback(acq, 3, chan3buffer, acq->data);
 			}
 		}
 

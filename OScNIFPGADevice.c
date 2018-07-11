@@ -159,7 +159,7 @@ static OSc_Error NIFPGAGetNumberOfChannels(OSc_Device *device, uint32_t *nChanne
 
 static OSc_Error NIFPGAGetBytesPerSample(OSc_Device *device, uint32_t *bytesPerSample)
 {
-	*bytesPerSample = 2;
+	*bytesPerSample = 1; // chaneg from 2 (16 bit) to 1 (8 bit)
 	return OSc_Error_OK;
 }
 
