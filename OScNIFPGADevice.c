@@ -259,3 +259,15 @@ struct OSc_Device_Impl OpenScan_NIFPGA_Device_Impl = {
 	.IsRunning = NIFPGAIsRunning,
 	.Wait = NIFPGAWait,
 };
+
+
+
+OSc_Error OSc_ENTRY_POINT_FUNC(struct OSc_Device_Impl **impls, size_t *implCount)
+{
+	if (*implCount < 1)
+		return OSc_Error_OK;
+
+	impls[0] = &OpenScan_NIFPGA_Device_Impl;
+	*implCount = 1;
+	return OSc_Error_OK;
+}
