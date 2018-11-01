@@ -21,6 +21,8 @@ enum
 	FPGA_STATE_STOP,
 };
 
+#define OSc_DEFAULT_RESOLUTION 512
+#define OSc_DEFAULT_ZOOM 1.0
 
 struct OScNIFPGAPrivateData
 {
@@ -32,23 +34,29 @@ struct OScNIFPGAPrivateData
 	size_t settingCount;
 
 	bool settingsChanged;
+	bool reloadWaveformRequired;
+	bool scannerEnabled;
+	bool detectorEnabled;
 
 	double scanRate;
 	uint32_t resolution;
 	double zoom;
+	double magnification; // = (resolution/512) * (zoom/1)
 	double offsetXY[2];
 
 	enum {
-		CHANNELS_RAW_IMAGE,
-		CHANNELS_KALMAN_AVERAGED,
-		CHANNELS_RAW_AND_KALMAN,
+		CHANNELS_1_,
+		CHANNELS_2_,
+		CHANNELS_3_,
+		CHANNELS_4_,
 
 		CHANNELS_NUM_VALUES
 	} channels;
 
 	bool kalmanProgressive;
-	double filterGain;
+	uint16_t filterGain;
 	uint32_t kalmanFrames;
+	uint32_t nFrames;
 
 	struct
 	{

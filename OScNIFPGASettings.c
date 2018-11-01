@@ -18,6 +18,7 @@ static OSc_Error GetScanRate(OSc_Setting *setting, double *value)
 static OSc_Error SetScanRate(OSc_Setting *setting, double value)
 {
 	GetData(setting->device)->scanRate = value;
+	GetData(setting->device)->settingsChanged = true;
 	return OSc_Error_OK;
 }
 
@@ -26,11 +27,14 @@ static OSc_Error GetScanRateValues(OSc_Setting *setting, double **values, size_t
 {
 	static double v[] = {
 		0.05,
+		0.08,
 		0.10,
+		0.12,
 		0.15,
 		0.20,
 		0.25,
 		0.30,
+		0.35,
 		0.40,
 		0.50,
 	};
@@ -51,6 +55,10 @@ static struct OSc_Setting_Impl SettingImpl_ScanRate = {
 static OSc_Error GetZoom(OSc_Setting *setting, double *value)
 {
 	*value = GetData(setting->device)->zoom;
+	GetData(setting->device)->magnification = 
+		(double)GetData(setting->device)->resolution / (double)OSc_DEFAULT_RESOLUTION
+		* GetData(setting->device)->zoom / OSc_DEFAULT_ZOOM;
+
 	return OSc_Error_OK;
 }
 
@@ -58,6 +66,14 @@ static OSc_Error GetZoom(OSc_Setting *setting, double *value)
 static OSc_Error SetZoom(OSc_Setting *setting, double value)
 {
 	GetData(setting->device)->zoom = value;
+	GetData(setting->device)->settingsChanged = true;
+	GetData(setting->device)->reloadWaveformRequired = true;
+
+// reflect the change to magnification as well
+	GetData(setting->device)->magnification =
+	(double)GetData(setting->device)->resolution / (double)OSc_DEFAULT_RESOLUTION
+		* value / OSc_DEFAULT_ZOOM;
+
 	return OSc_Error_OK;
 }
 
@@ -88,6 +104,8 @@ static OSc_Error GetOffset(OSc_Setting *setting, double *value)
 static OSc_Error SetOffset(OSc_Setting *setting, double value)
 {
 	GetData(setting->device)->offsetXY[(intptr_t)(setting->implData)] = value;
+	GetData(setting->device)->settingsChanged = true;
+	GetData(setting->device)->reloadWaveformRequired = true;
 	return OSc_Error_OK;
 }
 
@@ -136,14 +154,17 @@ static OSc_Error GetChannelsNameForValue(OSc_Setting *setting, uint32_t value, c
 {
 	switch (value)
 	{
-	case CHANNELS_RAW_IMAGE:
-		strcpy(name, "RawImage");
+	case CHANNELS_1_:
+		strcpy(name, "Channel 1");
 		break;
-	case CHANNELS_KALMAN_AVERAGED:
-		strcpy(name, "KalmanAveraged");
+	case CHANNELS_2_:
+		strcpy(name, "Channel 1-2");
 		break;
-	case CHANNELS_RAW_AND_KALMAN:
-		strcpy(name, "RawAndKalmanAveraged");
+	case CHANNELS_3_:
+		strcpy(name, "Channel 1-3");
+		break;
+	case CHANNELS_4_:
+		strcpy(name, "Channel 1-4");
 		break;
 	default:
 		strcpy(name, "");
@@ -155,12 +176,14 @@ static OSc_Error GetChannelsNameForValue(OSc_Setting *setting, uint32_t value, c
 
 static OSc_Error GetChannelsValueForName(OSc_Setting *setting, uint32_t *value, const char *name)
 {
-	if (!strcmp(name, "RawImage"))
-		*value = CHANNELS_RAW_IMAGE;
-	else if (!strcmp(name, "KalmanAveraged"))
-		*value = CHANNELS_KALMAN_AVERAGED;
-	else if (!strcmp(name, "RawAndKalmanAveraged"))
-		*value = CHANNELS_RAW_AND_KALMAN;
+	if (!strcmp(name, "Channel 1"))
+		*value = CHANNELS_1_;
+	else if (!strcmp(name, "Channel 1-2"))
+		*value = CHANNELS_2_;
+	else if (!strcmp(name, "Channel 1-3"))
+		*value = CHANNELS_3_;
+	else if (!strcmp(name, "Channel 1-4"))
+		*value = CHANNELS_4_;
 	else
 		return OSc_Error_Unknown;
 	return OSc_Error_OK;
@@ -193,6 +216,48 @@ static OSc_Error SetKalmanProgressive(OSc_Setting *setting, bool value)
 static struct OSc_Setting_Impl SettingImpl_KalmanProgressive = {
 	.GetBool = GetKalmanProgressive,
 	.SetBool = SetKalmanProgressive,
+};
+
+static OSc_Error GetScannerEnabled(OSc_Setting *setting, bool *value)
+{
+	*value = GetData(setting->device)->scannerEnabled;
+	return OSc_Error_OK;
+}
+
+
+static OSc_Error SetScannerEnabled(OSc_Setting *setting, bool value)
+{
+	GetData(setting->device)->scannerEnabled = value;
+	GetData(setting->device)->settingsChanged = true;
+	GetData(setting->device)->reloadWaveformRequired = true;
+	return OSc_Error_OK;
+}
+
+
+static struct OSc_Setting_Impl SettingImpl_ScannerEnabled = {
+	.GetBool = GetScannerEnabled,
+	.SetBool = SetScannerEnabled,
+};
+
+static OSc_Error GetDetectorEnabled(OSc_Setting *setting, bool *value)
+{
+	*value = GetData(setting->device)->detectorEnabled;
+	return OSc_Error_OK;
+}
+
+
+static OSc_Error SetDetectorEnabled(OSc_Setting *setting, bool value)
+{
+	GetData(setting->device)->detectorEnabled = value;
+	GetData(setting->device)->settingsChanged = true;
+	GetData(setting->device)->reloadWaveformRequired = true;
+	return OSc_Error_OK;
+}
+
+
+static struct OSc_Setting_Impl SettingImpl_DetectorEnabled = {
+	.GetBool = GetDetectorEnabled,
+	.SetBool = SetDetectorEnabled,
 };
 
 
@@ -236,6 +301,7 @@ static OSc_Error GetKalmanFrames(OSc_Setting *setting, int32_t *value)
 static OSc_Error SetKalmanFrames(OSc_Setting *setting, int32_t value)
 {
 	GetData(setting->device)->kalmanFrames = value;
+	GetData(setting->device)->settingsChanged = true;
 	return OSc_Error_OK;
 }
 
@@ -285,6 +351,14 @@ OSc_Error PrepareSettings(OSc_Device *device)
 	OSc_Return_If_Error(OSc_Setting_Create(&kalmanProgressive, device, "KalmanAveragingProgressive", OSc_Value_Type_Bool,
 		&SettingImpl_KalmanProgressive, NULL));
 
+	OSc_Setting *scannerEnabled;
+	OSc_Return_If_Error(OSc_Setting_Create(&scannerEnabled, device, "EnableScanner", OSc_Value_Type_Bool,
+		&SettingImpl_ScannerEnabled, NULL));
+
+	OSc_Setting *detectorEnabled;
+	OSc_Return_If_Error(OSc_Setting_Create(&detectorEnabled, device, "EnableDetector", OSc_Value_Type_Bool,
+		&SettingImpl_DetectorEnabled, NULL));
+
 	OSc_Setting *filterGain;
 	OSc_Return_If_Error(OSc_Setting_Create(&filterGain, device, "KalmanAveragingFilterGain", OSc_Value_Type_Float64,
 		&SettingImpl_FilterGain, NULL));
@@ -295,7 +369,7 @@ OSc_Error PrepareSettings(OSc_Device *device)
 
 	OSc_Setting *ss[] = {
 		scanRate, zoom, offsetX, offsetY,
-		channels, kalmanProgressive, filterGain, kalmanFrames,
+		channels, kalmanProgressive, scannerEnabled, detectorEnabled, filterGain, kalmanFrames,
 	};
 	size_t nSettings = sizeof(ss) / sizeof(OSc_Setting *);
 	OSc_Setting **settings = malloc(sizeof(ss));

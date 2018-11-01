@@ -5,6 +5,7 @@
 
 static OSc_Device **g_devices;
 static size_t g_deviceCount;
+static uint32_t n;
 
 
 static OSc_Error NIFPGAGetModelName(const char **name)
@@ -103,8 +104,28 @@ static OSc_Error NIFPGASetResolution(OSc_Device *device, size_t width, size_t he
 		return OSc_Error_OK;
 	GetData(device)->resolution = (uint32_t)width;
 	GetData(device)->settingsChanged = true;
+	GetData(device)->reloadWaveformRequired = true;
+
+	GetData(device)->magnification = (double)width / OSc_DEFAULT_RESOLUTION * GetData(device)->zoom / OSc_DEFAULT_ZOOM;
+
 	return OSc_Error_OK;
 }
+
+static OSc_Error NIFPGAGetMagnification(OSc_Device *device, double *magnification)
+{
+	*magnification = GetData(device)->magnification;
+	return OSc_Error_OK;
+}
+
+static OSc_Error NIFPGASetMagnification(OSc_Device *device)
+{
+	size_t resolution = GetData(device)->resolution;
+	double zoom = GetData(device)->zoom;
+	GetData(device)->magnification = (double)(resolution / OSc_DEFAULT_RESOLUTION) * (zoom / OSc_DEFAULT_ZOOM);
+	
+	return OSc_Error_OK;
+}
+
 
 
 static OSc_Error NIFPGAGetImageSize(OSc_Device *device, uint32_t *width, uint32_t *height)
@@ -117,14 +138,28 @@ static OSc_Error NIFPGAGetImageSize(OSc_Device *device, uint32_t *width, uint32_
 
 static OSc_Error NIFPGAGetNumberOfChannels(OSc_Device *device, uint32_t *nChannels)
 {
-	*nChannels = GetData(device)->channels == CHANNELS_RAW_AND_KALMAN ? 2 : 1;
+	switch (GetData(device)->channels)
+	{
+	case CHANNELS_1_:
+		*nChannels = 1;
+		break;
+	case CHANNELS_2_:
+		*nChannels = 2;
+		break;
+	case CHANNELS_3_:
+		*nChannels = 3;
+		break;
+	case CHANNELS_4_:
+		*nChannels = 4;
+		break;
+	}
 	return OSc_Error_OK;
 }
 
 
 static OSc_Error NIFPGAGetBytesPerSample(OSc_Device *device, uint32_t *bytesPerSample)
 {
-	*bytesPerSample = 2;
+	*bytesPerSample = 2; // chaneg from 2 (16 bit) to 1 (8 bit)
 	return OSc_Error_OK;
 }
 
@@ -151,11 +186,34 @@ static OSc_Error ArmImpl(OSc_Device *device, OSc_Acquisition *acq)
 
 	if (GetData(device)->settingsChanged)
 	{
-		OSc_Return_If_Error(ReloadWaveform(device));
-		GetData(device)->settingsChanged = false;
-	}
+		OSc_Log_Debug(device, "Setting up new scan...");
+		if (GetData(device)->reloadWaveformRequired)
+		{
+			OSc_Return_If_Error(StartFPGA(device));
+			OSc_Return_If_Error(WaitTillIdle(device));
+		}
+		OSc_Log_Debug(device, "1. Setting parameters...");
+		OSc_Return_If_Error(SetBuildInParameters(device));
+		OSc_Return_If_Error(SetPixelParameters(device,GetData(device)->scanRate));
 
-	OSc_Return_If_Error(SetScanParameters(device));
+		OSc_Log_Debug(device, "2. Clean flags...");
+		OSc_Return_If_Error(Cleanflags(device));
+		OSc_Return_If_Error(SetResolutionParameters(device, GetData(device)->resolution));
+		OSc_Return_If_Error(SetTaskParameters(device, GetData(device)->nFrames));
+
+		OSc_Log_Debug(device, "3. Cleaning FPGA DRAM and initializing globals...");
+		OSc_Return_If_Error(InitScan(device));
+		OSc_Return_If_Error(WaitTillIdle(device));
+
+		if (GetData(device)->reloadWaveformRequired)
+		{
+			OSc_Return_If_Error(ReloadWaveform(device));
+			OSc_Return_If_Error(WaitTillIdle(device));
+		}
+
+		GetData(device)->settingsChanged = false;
+		GetData(device)->reloadWaveformRequired = false;
+	}
 
 	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	{
@@ -247,6 +305,8 @@ struct OSc_Device_Impl OpenScan_NIFPGA_Device_Impl = {
 	.GetAllowedResolutions = NIFPGAGetAllowedResolutions,
 	.GetResolution = NIFPGAGetResolution,
 	.SetResolution = NIFPGASetResolution,
+	.GetMagnification = NIFPGAGetMagnification,
+	.SetMagnification = NIFPGASetMagnification,
 	.GetImageSize = NIFPGAGetImageSize,
 	.GetNumberOfChannels = NIFPGAGetNumberOfChannels,
 	.GetBytesPerSample = NIFPGAGetBytesPerSample,
