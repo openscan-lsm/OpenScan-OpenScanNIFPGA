@@ -64,7 +64,7 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 	data->kalmanProgressive = true;
 	data->detectorEnabled = true;
 	data->scannerEnabled = true;
-	data->filterGain = 0.99;
+	data->filterGain = 0.99; // TODO This is probably wrong; see also SetScanParameters
 	data->kalmanFrames = 1;
 	data->nFrames = 1;
 
@@ -308,7 +308,7 @@ OSc_Error SetScanParameters(OSc_Device *device)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-	GetData(device)->filterGain = 65534;
+	GetData(device)->filterGain = 65534; // TODO See also default parameters
 	stat = NiFpga_WriteU16(session,
 		NiFpga_OpenScanFPGAHost_ControlU16_Filtergain,
 		GetData(device)->filterGain);
@@ -1031,36 +1031,35 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 				kalmanBuffer4[i] = (uint16_t)(rawAndAveraged4[i] >> 16);
 			}
 
-
+			bool shouldContinue;
 			switch (GetData(device)->channels)
 			{
 			case CHANNELS_1_:
-				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
+				shouldContinue = OSc_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer);
 				break;
 
 			case CHANNELS_2_:
-				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
-				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
+				shouldContinue = OSc_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
+					OSc_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2);
 				break;
 			
 			case CHANNELS_3_:
-				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
-				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
-				acq->frameCallback(acq, 2, kalmanBuffer3, acq->data);
+				shouldContinue = OSc_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
+					OSc_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
+					OSc_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3);
 				break;
 			
 			case CHANNELS_4_:
-				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
-				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
-				acq->frameCallback(acq, 2, kalmanBuffer3, acq->data);
-				acq->frameCallback(acq, 3, kalmanBuffer4, acq->data);
+			default: // TODO Why is default 4?
+				shouldContinue = OSc_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
+					OSc_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
+					OSc_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3) &&
+					OSc_Acquisition_CallFrameCallback(acq, 3, kalmanBuffer4);
 				break;
-			
-			default:
-				acq->frameCallback(acq, 0, kalmanBuffer, acq->data);
-				acq->frameCallback(acq, 1, kalmanBuffer2, acq->data);
-				acq->frameCallback(acq, 2, kalmanBuffer3, acq->data);
-				acq->frameCallback(acq, 3, kalmanBuffer4, acq->data);
+			}
+
+			if (!shouldContinue) {
+				// TODO We should use the return value of the frame callback to halt acquisition
 			}
 		}
 
@@ -1114,14 +1113,17 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 	OSc_Device *device = (OSc_Device *)param;
 	OSc_Acquisition *acq = GetData(device)->acquisition.acquisition;
 
+	uint32_t acqNumFrames;
+	OSc_Return_If_Error(OSc_Acquisition_GetNumberOfFrames(acq, &acqNumFrames));
+
 	int totalFrames;
 	int thisFrame;
-	if (acq->numberOfFrames == INT32_MAX)
+	if (acqNumFrames == INT32_MAX)
 		totalFrames = INT32_MAX;
 	//else if (GetData(device)->kalmanProgressive)
 	// 	totalFrames = acq->numberOfFrames * GetData(device)->kalmanFrames;
 	else
-		totalFrames = acq->numberOfFrames * GetData(device)->kalmanFrames;
+		totalFrames = acqNumFrames * GetData(device)->kalmanFrames;
 
 	OSc_Return_If_Error(SetTaskParameters(device, totalFrames));
 	OSc_Return_If_Error(WaitTillIdle(device));
@@ -1130,7 +1132,7 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 	snprintf(msg, OSc_MAX_STR_LEN, "%d Kalman images", GetData(device)->kalmanFrames);
 	OSc_Log_Debug(device, msg);
 
-	snprintf(msg, OSc_MAX_STR_LEN, "%d number of frames", acq->numberOfFrames);
+	snprintf(msg, OSc_MAX_STR_LEN, "%d number of frames", acqNumFrames);
 	OSc_Log_Debug(device, msg);
 
 	snprintf(msg, OSc_MAX_STR_LEN, "%d total images", totalFrames);
@@ -1141,7 +1143,7 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 
 	thisFrame = 1;
 
-	for (int frame = 0; frame < acq->numberOfFrames; ++frame)
+	for (uint32_t frame = 0; frame < acqNumFrames; ++frame)
 	{
 		char msg[OSc_MAX_STR_LEN + 1];
 		snprintf(msg, OSc_MAX_STR_LEN, "Start frame %d", thisFrame);

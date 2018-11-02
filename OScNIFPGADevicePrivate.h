@@ -2,7 +2,6 @@
 
 #include "OScNIFPGADevice.h"
 
-#include "OpenScanLibPrivate.h"
 #include "OpenScanDeviceImpl.h"
 
 #include <NiFpga.h>
@@ -74,7 +73,13 @@ struct OScNIFPGAPrivateData
 
 static inline struct OScNIFPGAPrivateData *GetData(OSc_Device *device)
 {
-	return (struct OScNIFPGAPrivateData *)(device->implData);
+	return (struct OScNIFPGAPrivateData *)OSc_Device_GetImplData(device);
+}
+
+
+static inline struct OScNIFPGAPrivateData *GetSettingDeviceData(OSc_Setting *setting)
+{
+	return GetData(OSc_Setting_GetDevice(setting));
 }
 
 

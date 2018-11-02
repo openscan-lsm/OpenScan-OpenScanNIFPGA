@@ -1,6 +1,6 @@
 #include "OScNIFPGADevicePrivate.h"
 #include "OScNIFPGA.h"
-#include "OpenScanLibPrivate.h"
+
 
 
 static OSc_Device **g_devices;
@@ -28,7 +28,6 @@ static OSc_Error NIFPGAGetInstances(OSc_Device ***devices, size_t *count)
 static OSc_Error NIFPGAReleaseInstance(OSc_Device *device)
 {
 	free(GetData(device));
-	device->implData = NULL;
 	return OSc_Error_OK;
 }
 

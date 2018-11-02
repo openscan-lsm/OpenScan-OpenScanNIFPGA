@@ -1,5 +1,4 @@
 #include "OScNIFPGADevicePrivate.h"
-#include "OpenScanLibPrivate.h"
 
 #include "NiFpga_OpenScanFPGAHost.h"
 
@@ -10,15 +9,15 @@
 
 static OSc_Error GetScanRate(OSc_Setting *setting, double *value)
 {
-	*value = GetData(setting->device)->scanRate;
+	*value = GetSettingDeviceData(setting)->scanRate;
 	return OSc_Error_OK;
 }
 
 
 static OSc_Error SetScanRate(OSc_Setting *setting, double value)
 {
-	GetData(setting->device)->scanRate = value;
-	GetData(setting->device)->settingsChanged = true;
+	GetSettingDeviceData(setting)->scanRate = value;
+	GetSettingDeviceData(setting)->settingsChanged = true;
 	return OSc_Error_OK;
 }
 
@@ -54,10 +53,10 @@ static struct OSc_Setting_Impl SettingImpl_ScanRate = {
 
 static OSc_Error GetZoom(OSc_Setting *setting, double *value)
 {
-	*value = GetData(setting->device)->zoom;
-	GetData(setting->device)->magnification = 
-		(double)GetData(setting->device)->resolution / (double)OSc_DEFAULT_RESOLUTION
-		* GetData(setting->device)->zoom / OSc_DEFAULT_ZOOM;
+	*value = GetSettingDeviceData(setting)->zoom;
+	GetSettingDeviceData(setting)->magnification =
+		(double)GetSettingDeviceData(setting)->resolution / (double)OSc_DEFAULT_RESOLUTION
+		* GetSettingDeviceData(setting)->zoom / OSc_DEFAULT_ZOOM;
 
 	return OSc_Error_OK;
 }
@@ -65,13 +64,13 @@ static OSc_Error GetZoom(OSc_Setting *setting, double *value)
 
 static OSc_Error SetZoom(OSc_Setting *setting, double value)
 {
-	GetData(setting->device)->zoom = value;
-	GetData(setting->device)->settingsChanged = true;
-	GetData(setting->device)->reloadWaveformRequired = true;
+	GetSettingDeviceData(setting)->zoom = value;
+	GetSettingDeviceData(setting)->settingsChanged = true;
+	GetSettingDeviceData(setting)->reloadWaveformRequired = true;
 
 // reflect the change to magnification as well
-	GetData(setting->device)->magnification =
-	(double)GetData(setting->device)->resolution / (double)OSc_DEFAULT_RESOLUTION
+	GetSettingDeviceData(setting)->magnification =
+	(double)GetSettingDeviceData(setting)->resolution / (double)OSc_DEFAULT_RESOLUTION
 		* value / OSc_DEFAULT_ZOOM;
 
 	return OSc_Error_OK;
@@ -96,16 +95,16 @@ static struct OSc_Setting_Impl SettingImpl_Zoom = {
 
 static OSc_Error GetOffset(OSc_Setting *setting, double *value)
 {
-	*value = GetData(setting->device)->offsetXY[(intptr_t)(setting->implData)];
+	*value = GetSettingDeviceData(setting)->offsetXY[(intptr_t)OSc_Setting_GetImplData(setting)];
 	return OSc_Error_OK;
 }
 
 
 static OSc_Error SetOffset(OSc_Setting *setting, double value)
 {
-	GetData(setting->device)->offsetXY[(intptr_t)(setting->implData)] = value;
-	GetData(setting->device)->settingsChanged = true;
-	GetData(setting->device)->reloadWaveformRequired = true;
+	GetSettingDeviceData(setting)->offsetXY[(intptr_t)OSc_Setting_GetImplData(setting)] = value;
+	GetSettingDeviceData(setting)->settingsChanged = true;
+	GetSettingDeviceData(setting)->reloadWaveformRequired = true;
 	return OSc_Error_OK;
 }
 
@@ -131,14 +130,14 @@ static struct OSc_Setting_Impl SettingImpl_Offset = {
 
 static OSc_Error GetChannels(OSc_Setting *setting, uint32_t *value)
 {
-	*value = GetData(setting->device)->channels;
+	*value = GetSettingDeviceData(setting)->channels;
 	return OSc_Error_OK;
 }
 
 
 static OSc_Error SetChannels(OSc_Setting *setting, uint32_t value)
 {
-	GetData(setting->device)->channels = value;
+	GetSettingDeviceData(setting)->channels = value;
 	return OSc_Error_OK;
 }
 
@@ -201,14 +200,14 @@ static struct OSc_Setting_Impl SettingImpl_Channels = {
 
 static OSc_Error GetKalmanProgressive(OSc_Setting *setting, bool *value)
 {
-	*value = GetData(setting->device)->kalmanProgressive;
+	*value = GetSettingDeviceData(setting)->kalmanProgressive;
 	return OSc_Error_OK;
 }
 
 
 static OSc_Error SetKalmanProgressive(OSc_Setting *setting, bool value)
 {
-	GetData(setting->device)->kalmanProgressive = value;
+	GetSettingDeviceData(setting)->kalmanProgressive = value;
 	return OSc_Error_OK;
 }
 
@@ -220,16 +219,16 @@ static struct OSc_Setting_Impl SettingImpl_KalmanProgressive = {
 
 static OSc_Error GetScannerEnabled(OSc_Setting *setting, bool *value)
 {
-	*value = GetData(setting->device)->scannerEnabled;
+	*value = GetSettingDeviceData(setting)->scannerEnabled;
 	return OSc_Error_OK;
 }
 
 
 static OSc_Error SetScannerEnabled(OSc_Setting *setting, bool value)
 {
-	GetData(setting->device)->scannerEnabled = value;
-	GetData(setting->device)->settingsChanged = true;
-	GetData(setting->device)->reloadWaveformRequired = true;
+	GetSettingDeviceData(setting)->scannerEnabled = value;
+	GetSettingDeviceData(setting)->settingsChanged = true;
+	GetSettingDeviceData(setting)->reloadWaveformRequired = true;
 	return OSc_Error_OK;
 }
 
@@ -241,16 +240,16 @@ static struct OSc_Setting_Impl SettingImpl_ScannerEnabled = {
 
 static OSc_Error GetDetectorEnabled(OSc_Setting *setting, bool *value)
 {
-	*value = GetData(setting->device)->detectorEnabled;
+	*value = GetSettingDeviceData(setting)->detectorEnabled;
 	return OSc_Error_OK;
 }
 
 
 static OSc_Error SetDetectorEnabled(OSc_Setting *setting, bool value)
 {
-	GetData(setting->device)->detectorEnabled = value;
-	GetData(setting->device)->settingsChanged = true;
-	GetData(setting->device)->reloadWaveformRequired = true;
+	GetSettingDeviceData(setting)->detectorEnabled = value;
+	GetSettingDeviceData(setting)->settingsChanged = true;
+	GetSettingDeviceData(setting)->reloadWaveformRequired = true;
 	return OSc_Error_OK;
 }
 
@@ -263,14 +262,14 @@ static struct OSc_Setting_Impl SettingImpl_DetectorEnabled = {
 
 static OSc_Error GetFilterGain(OSc_Setting *setting, double *value)
 {
-	*value = GetData(setting->device)->filterGain;
+	*value = GetSettingDeviceData(setting)->filterGain;
 	return OSc_Error_OK;
 }
 
 
 static OSc_Error SetFilterGain(OSc_Setting *setting, double value)
 {
-	GetData(setting->device)->filterGain = value;
+	GetSettingDeviceData(setting)->filterGain = (uint16_t) value;
 	return OSc_Error_OK;
 }
 
@@ -293,15 +292,15 @@ static struct OSc_Setting_Impl SettingImpl_FilterGain = {
 
 static OSc_Error GetKalmanFrames(OSc_Setting *setting, int32_t *value)
 {
-	*value = GetData(setting->device)->kalmanFrames;
+	*value = GetSettingDeviceData(setting)->kalmanFrames;
 	return OSc_Error_OK;
 }
 
 
 static OSc_Error SetKalmanFrames(OSc_Setting *setting, int32_t value)
 {
-	GetData(setting->device)->kalmanFrames = value;
-	GetData(setting->device)->settingsChanged = true;
+	GetSettingDeviceData(setting)->kalmanFrames = value;
+	GetSettingDeviceData(setting)->settingsChanged = true;
 	return OSc_Error_OK;
 }
 
