@@ -22,36 +22,36 @@ static inline uint16_t DoubleToFixed16(double d, int intBits)
 }
 
 
-static OSc_Error EnsureNiFpgaInitialized(void)
+static OScDev_Error EnsureNiFpgaInitialized(void)
 {
 	if (g_NiFpga_initialized)
-		return OSc_Error_OK;
+		return OScDev_OK;
 	NiFpga_Status stat = NiFpga_Initialize();
 	if (NiFpga_IsError(stat))
 	{
-		OSc_Log_Error(NULL, "Cannot access NI FPGA C API");
-		return OSc_Error_Driver_Not_Available;
+		OScDev_Log_Error(NULL, "Cannot access NI FPGA C API");
+		return OScDev_Error_Driver_Not_Available;
 	}
 	g_NiFpga_initialized = true;
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-static OSc_Error DeinitializeNiFpga(void)
+static OScDev_Error DeinitializeNiFpga(void)
 {
 	if (!g_NiFpga_initialized)
-		return OSc_Error_OK;
+		return OScDev_OK;
 	NiFpga_Status stat = NiFpga_Finalize();
 	if (NiFpga_IsError(stat))
 		return stat; // TODO
 	g_NiFpga_initialized = false;
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
 static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 {
-	strncpy(data->bitfile, NiFpga_OpenScanFPGAHost_Bitfile, OSc_MAX_STR_LEN);
+	strncpy(data->bitfile, NiFpga_OpenScanFPGAHost_Bitfile, OScDev_MAX_STR_LEN);
 
 	data->settingsChanged = true;
 	data->reloadWaveformRequired = true;
@@ -79,39 +79,42 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 }
 
 
-OSc_Error EnumerateInstances(OSc_Device ***devices, size_t *deviceCount)
+OScDev_Error EnumerateInstances(OScDev_Device ***devices, size_t *deviceCount)
 {
-	OSc_Return_If_Error(EnsureNiFpgaInitialized());
+	OScDev_Error err;
+	if (OScDev_CHECK(err, EnsureNiFpgaInitialized()))
+		return err;
 
 	// The first FPGA board on the system always has the RIO Resource Name
 	// "RIO0" (as far as I know). For now, only support this one.
 
 	struct OScNIFPGAPrivateData *data = calloc(1, sizeof(struct OScNIFPGAPrivateData));
-	strncpy(data->rioResourceName, "RIO0", OSc_MAX_STR_LEN);
+	strncpy(data->rioResourceName, "RIO0", OScDev_MAX_STR_LEN);
 
-	OSc_Device *device;
-	OSc_Error err;
-	if (OSc_Check_Error(err, OSc_Device_Create(&device, &OpenScan_NIFPGA_Device_Impl, data)))
+	OScDev_Device *device;
+	if (OScDev_CHECK(err, OScDev_Device_Create(&device, &OpenScan_NIFPGA_Device_Impl, data)))
 	{
-		char msg[OSc_MAX_STR_LEN + 1] = "Failed to create device ";
+		char msg[OScDev_MAX_STR_LEN + 1] = "Failed to create device ";
 		strcat(msg, data->rioResourceName);
-		OSc_Log_Error(NULL, msg);
+		OScDev_Log_Error(NULL, msg);
 		return err; // TODO
 	}
 
 	PopulateDefaultParameters(GetData(device));
 
-	*devices = malloc(sizeof(OSc_Device *));
+	*devices = malloc(sizeof(OScDev_Device *));
 	*deviceCount = 1;
 	(*devices)[0] = device;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-OSc_Error OpenFPGA(OSc_Device *device)
+OScDev_Error OpenFPGA(OScDev_Device *device)
 {
-	OSc_Return_If_Error(EnsureNiFpgaInitialized());
+	OScDev_Error err;
+	if (OScDev_CHECK(err, EnsureNiFpgaInitialized()))
+		return err;
 
 	NiFpga_Status stat = NiFpga_Open(
 		GetData(device)->bitfile,
@@ -124,11 +127,11 @@ OSc_Error OpenFPGA(OSc_Device *device)
 
 	++g_openDeviceCount;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-OSc_Error CloseFPGA(OSc_Device *device)
+OScDev_Error CloseFPGA(OScDev_Device *device)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
@@ -150,22 +153,25 @@ OSc_Error CloseFPGA(OSc_Device *device)
 	}
 
 	--g_openDeviceCount;
-	if (g_openDeviceCount == 0)
-		OSc_Return_If_Error(DeinitializeNiFpga());
+	if (g_openDeviceCount == 0) {
+		OScDev_Error err;
+		if (OScDev_CHECK(err, DeinitializeNiFpga()))
+			return err;
+	}
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-OSc_Error StartFPGA(OSc_Device *device)
+OScDev_Error StartFPGA(OScDev_Device *device)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 	NiFpga_Status stat;
-	OSc_Log_Debug(device, "Resetting FPGA...");
+	OScDev_Log_Debug(device, "Resetting FPGA...");
 	stat = NiFpga_Reset(session);
 	if (NiFpga_IsError(stat))
 		return stat;
-	OSc_Log_Debug(device, "Starting FPGA...");
+	OScDev_Log_Debug(device, "Starting FPGA...");
 	stat = NiFpga_Run(session, 0);
 	if (NiFpga_IsError(stat))
 		return stat;
@@ -177,17 +183,19 @@ OSc_Error StartFPGA(OSc_Device *device)
 		return stat;
 	if (currentState != FPGA_STATE_IDLE)
 	{
-		OSc_Log_Error(device, "Unexpected state after FPGA reset");
-		return OSc_Error_Unknown;
+		OScDev_Log_Error(device, "Unexpected state after FPGA reset");
+		return OScDev_Error_Unknown;
 	}
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-static OSc_Error SendParameters(OSc_Device *device)
+static OScDev_Error SendParameters(OScDev_Device *device)
 {
-	OSc_Return_If_Error(StartFPGA(device));
+	OScDev_Error err;
+	if (OScDev_CHECK(err, StartFPGA(device)))
+		return err;
 
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
@@ -205,12 +213,12 @@ static OSc_Error SendParameters(OSc_Device *device)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
 
-static OSc_Error SetScanRate(OSc_Device *device, double scanRate)
+static OScDev_Error SetScanRate(OScDev_Device *device, double scanRate)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
@@ -226,11 +234,11 @@ static OSc_Error SetScanRate(OSc_Device *device, double scanRate)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-static OSc_Error SetResolution(OSc_Device *device, uint32_t resolution)
+static OScDev_Error SetResolution(OScDev_Device *device, uint32_t resolution)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
@@ -269,11 +277,11 @@ static OSc_Error SetResolution(OSc_Device *device, uint32_t resolution)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-OSc_Error InitScan(OSc_Device *device)
+OScDev_Error InitScan(OScDev_Device *device)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
@@ -283,18 +291,18 @@ OSc_Error InitScan(OSc_Device *device)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-static OSc_Error SetKalmanGain(OSc_Device *device, double kg)
+static OScDev_Error SetKalmanGain(OScDev_Device *device, double kg)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-OSc_Error SetScanParameters(OSc_Device *device)
+OScDev_Error SetScanParameters(OScDev_Device *device)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
@@ -315,14 +323,14 @@ OSc_Error SetScanParameters(OSc_Device *device)
 	if (NiFpga_IsError(stat))
 		return stat;
 	int err = SetKalmanGain(device, 1.0);
-	if (err != OSc_Error_OK)
+	if (err != OScDev_OK)
 		return err;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *firstY)
+static OScDev_Error WriteWaveforms(OScDev_Device *device, uint16_t *firstX, uint16_t *firstY)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
@@ -337,10 +345,10 @@ static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *
 	uint16_t *xScaled = (uint16_t *)malloc(sizeof(uint16_t) * elementsPerLine);
 	uint16_t *yScaled = (uint16_t *)malloc(sizeof(uint16_t) * elementsPerRow);
 
-	OSc_Error err;
-	if (OSc_Check_Error(err, GenerateScaledWaveforms(resolution, 0.25 * zoom,
+	OScDev_Error err;
+	if (OScDev_CHECK(err, GenerateScaledWaveforms(resolution, 0.25 * zoom,
 		xScaled, yScaled, offsetX, offsetY)))
-		return OSc_Error_Waveform_Out_Of_Range;
+		return OScDev_Error_Waveform_Out_Of_Range;
 
 	NiFpga_Status stat;
 
@@ -377,11 +385,11 @@ static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *
 			goto error;
 		if (dramFull)
 		{
-			char msg[OSc_MAX_STR_LEN + 1];
-			snprintf(msg, OSc_MAX_STR_LEN, "FPGA DRAM full; wrote %u lines of %d",
+			char msg[OScDev_MAX_STR_LEN + 1];
+			snprintf(msg, OScDev_MAX_STR_LEN, "FPGA DRAM full; wrote %u lines of %d",
 				j, (int)resolution);
-			OSc_Log_Error(device, msg);
-			stat = OSc_Error_Waveform_Memory_Size_Mismatch;
+			OScDev_Log_Error(device, msg);
+			stat = OScDev_Error_Waveform_Memory_Size_Mismatch;
 			goto error;
 		}*/
 
@@ -412,8 +420,8 @@ static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *
 		goto error;
 	if (!dramFull)
 	{
-		stat = OSc_Error_Waveform_Memory_Size_Mismatch;
-		OSc_Log_Error(device, "FPGA DRAM not full after writing all lines");
+		stat = OScDev_Error_Waveform_Memory_Size_Mismatch;
+		OScDev_Log_Error(device, "FPGA DRAM not full after writing all lines");
 		goto error;
 	}*/
 
@@ -423,7 +431,7 @@ static OSc_Error WriteWaveforms(OSc_Device *device, uint16_t *firstX, uint16_t *
 	free(xScaled);
 	free(yScaled);
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 
 error:
 	free(xScaled);
@@ -432,7 +440,7 @@ error:
 }
 
 
-static OSc_Error MoveGalvosTo(OSc_Device *device, uint16_t x, uint16_t y)
+static OScDev_Error MoveGalvosTo(OScDev_Device *device, uint16_t x, uint16_t y)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
@@ -441,26 +449,29 @@ static OSc_Error MoveGalvosTo(OSc_Device *device, uint16_t x, uint16_t y)
 		NiFpga_OpenScanFPGAHost_ControlU32_Galvosignal, xy);
 	if (NiFpga_IsError(stat))
 		return stat;
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-OSc_Error ReloadWaveform(OSc_Device *device)
+OScDev_Error ReloadWaveform(OScDev_Device *device)
 {
+	OScDev_Error err;
 
 	uint16_t firstX, firstY;
-	OSc_Log_Debug(device, "Writing waveform...");
-	OSc_Return_If_Error(WriteWaveforms(device, &firstX, &firstY));
+	OScDev_Log_Debug(device, "Writing waveform...");
+	if (OScDev_CHECK(err, WriteWaveforms(device, &firstX, &firstY)))
+		return err;
 
-	OSc_Log_Debug(device, "Moving galvos to start position...");
-	OSc_Return_If_Error(MoveGalvosTo(device, firstX, firstY));
+	OScDev_Log_Debug(device, "Moving galvos to start position...");
+	if (OScDev_CHECK(err, MoveGalvosTo(device, firstX, firstY)))
+		return err;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
-OSc_Error WaitTillIdle(OSc_Device *device)
+OScDev_Error WaitTillIdle(OScDev_Device *device)
 {
-	OSc_Log_Debug(device, "Please wait...");
+	OScDev_Log_Debug(device, "Please wait...");
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 	NiFpga_Status stat;
 	uint16_t currentState;
@@ -471,11 +482,11 @@ OSc_Error WaitTillIdle(OSc_Device *device)
 			return stat;
 	} while (currentState != FPGA_STATE_IDLE);
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 
 }
 
-OSc_Error SetBuildInParameters(OSc_Device *device)
+OScDev_Error SetBuildInParameters(OScDev_Device *device)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 	NiFpga_Status stat;
@@ -484,10 +495,10 @@ OSc_Error SetBuildInParameters(OSc_Device *device)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
-OSc_Error SetPixelParameters(OSc_Device *device, double scanRate)
+OScDev_Error SetPixelParameters(OScDev_Device *device, double scanRate)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 	double pixelTime = 40.0 / scanRate;
@@ -506,10 +517,10 @@ OSc_Error SetPixelParameters(OSc_Device *device, double scanRate)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
-OSc_Error SetResolutionParameters(OSc_Device *device, uint32_t resolution) 
+OScDev_Error SetResolutionParameters(OScDev_Device *device, uint32_t resolution) 
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 	int32_t elementsPerLine = X_UNDERSHOOT + resolution + X_RETRACE_LEN;
@@ -552,10 +563,10 @@ OSc_Error SetResolutionParameters(OSc_Device *device, uint32_t resolution)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
-OSc_Error SetTaskParameters(OSc_Device *device, uint32_t nf)
+OScDev_Error SetTaskParameters(OScDev_Device *device, uint32_t nf)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 	uint16_t filtergain_ = 65534;
@@ -583,10 +594,10 @@ OSc_Error SetTaskParameters(OSc_Device *device, uint32_t nf)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
-OSc_Error Cleanflags(OSc_Device *device)
+OScDev_Error Cleanflags(OScDev_Device *device)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
@@ -622,13 +633,13 @@ OSc_Error Cleanflags(OSc_Device *device)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-static OSc_Error StartScan(OSc_Device *device)
+static OScDev_Error StartScan(OScDev_Device *device)
 {
-	OSc_Log_Debug(device, "Starting scanning...");
+	OScDev_Log_Debug(device, "Starting scanning...");
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
 	// Workaround: Set ReadytoScan to false to acquire only one image
@@ -642,29 +653,31 @@ static OSc_Error StartScan(OSc_Device *device)
 	if (NiFpga_IsError(stat))
 		return stat;
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-static OSc_Error StopScan(OSc_Device *device)
+static OScDev_Error StopScan(OScDev_Device *device)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 	
-	OSc_Log_Debug(device, "Stopping Scanning...");
+	OScDev_Log_Debug(device, "Stopping Scanning...");
 	NiFpga_Status stat = NiFpga_WriteBool(session,
 		NiFpga_OpenScanFPGAHost_ControlBool_ReadytoScan, false);
 	if (NiFpga_IsError(stat))
 		return stat;
-	OSc_Return_If_Error(WaitTillIdle(device));
+	OScDev_Error err;
+	if (OScDev_CHECK(err, WaitTillIdle(device)))
+		return err;
 
-	/*OSc_Log_Debug(device, "Cleaning Fifo...");
-	OSc_Return_If_Error(CleanFifo(device));
-	OSc_Return_If_Error(WaitTillIdle(device));*/
+	/*OScDev_Log_Debug(device, "Cleaning Fifo...");
+	if (OScDev_CHECK(err, CleanFifo(device))) {TODO}
+	if (OScDev_CHECK(err, WaitTillIdle(device))) {TODO}*/
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
-static OSc_Error CleanFifo(OSc_Device *device)
+static OScDev_Error CleanFifo(OScDev_Device *device)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
@@ -748,11 +761,11 @@ static OSc_Error CleanFifo(OSc_Device *device)
 		readSoFar += available;
 	} while (available != 0);
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discard)
+static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bool discard)
 {
 	uint32_t resolution = GetData(device)->resolution;
 	size_t nPixels = resolution * resolution;
@@ -763,7 +776,7 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 
 	if (GetData(device)->detectorEnabled == true)
 	{
-		OSc_Log_Debug(device, "Reading image...");
+		OScDev_Log_Debug(device, "Reading image...");
 		NiFpga_Session session = GetData(device)->niFpgaSession;
 
 		NiFpga_Status stat = NiFpga_StartFifo(session,
@@ -816,9 +829,9 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			loopcount++;
 			if (loopcount > 5000)
 			{
-				char msg[OSc_MAX_STR_LEN + 1];
-				snprintf(msg, OSc_MAX_STR_LEN, "Scan timeout");
-				OSc_Log_Debug(device, msg);
+				char msg[OScDev_MAX_STR_LEN + 1];
+				snprintf(msg, OScDev_MAX_STR_LEN, "Scan timeout");
+				OScDev_Log_Debug(device, msg);
 				break;
 			}
 
@@ -856,9 +869,9 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			loopcount++;
 			if (loopcount > 1000)
 			{
-				char msg[OSc_MAX_STR_LEN + 1];
-				snprintf(msg, OSc_MAX_STR_LEN, "Read image timeout");
-				OSc_Log_Debug(device, msg);
+				char msg[OScDev_MAX_STR_LEN + 1];
+				snprintf(msg, OScDev_MAX_STR_LEN, "Read image timeout");
+				OScDev_Log_Debug(device, msg);
 				break;
 			}
 			int32_t percentRead = (int32_t)(readSoFar * 100 / nPixels);
@@ -870,9 +883,9 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			{
 				if (percentRead % 1 == 0)
 				{
-					char msg[OSc_MAX_STR_LEN + 1];
-					snprintf(msg, OSc_MAX_STR_LEN, "Read channel 1 %d %%", percentRead);
-					OSc_Log_Debug(device, msg);
+					char msg[OScDev_MAX_STR_LEN + 1];
+					snprintf(msg, OScDev_MAX_STR_LEN, "Read channel 1 %d %%", percentRead);
+					OScDev_Log_Debug(device, msg);
 				}
 				prevPercentRead = percentRead;
 			}
@@ -881,9 +894,9 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			{
 				if (percentRead2 % 1 == 0)
 				{
-					char msg[OSc_MAX_STR_LEN + 1];
-					snprintf(msg, OSc_MAX_STR_LEN, "Read channel 2 %d %%", percentRead2);
-					OSc_Log_Debug(device, msg);
+					char msg[OScDev_MAX_STR_LEN + 1];
+					snprintf(msg, OScDev_MAX_STR_LEN, "Read channel 2 %d %%", percentRead2);
+					OScDev_Log_Debug(device, msg);
 				}
 				prevPercentRead2 = percentRead2;
 			}
@@ -892,9 +905,9 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			{
 				if (percentRead3 % 1 == 0)
 				{
-					char msg[OSc_MAX_STR_LEN + 1];
-					snprintf(msg, OSc_MAX_STR_LEN, "Read channel 3 %d %%", percentRead3);
-					OSc_Log_Debug(device, msg);
+					char msg[OScDev_MAX_STR_LEN + 1];
+					snprintf(msg, OScDev_MAX_STR_LEN, "Read channel 3 %d %%", percentRead3);
+					OScDev_Log_Debug(device, msg);
 				}
 				prevPercentRead3 = percentRead3;
 			}
@@ -903,9 +916,9 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			{
 				if (percentRead4 % 1 == 0)
 				{
-					char msg[OSc_MAX_STR_LEN + 1];
-					snprintf(msg, OSc_MAX_STR_LEN, "Read channel 4 %d %%", percentRead4);
-					OSc_Log_Debug(device, msg);
+					char msg[OScDev_MAX_STR_LEN + 1];
+					snprintf(msg, OScDev_MAX_STR_LEN, "Read channel 4 %d %%", percentRead4);
+					OScDev_Log_Debug(device, msg);
 				}
 				prevPercentRead4 = percentRead4;
 			}
@@ -985,7 +998,7 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 		Sleep(10);
 		if (remaining > 0)
 		{
-			return OSc_Error_Data_Left_In_Fifo_After_Reading_Image;
+			return OScDev_Error_Data_Left_In_Fifo_After_Reading_Image;
 		}
 
 		stat = NiFpga_StopFifo(session,
@@ -1035,26 +1048,26 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			switch (GetData(device)->channels)
 			{
 			case CHANNELS_1_:
-				shouldContinue = OSc_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer);
+				shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer);
 				break;
 
 			case CHANNELS_2_:
-				shouldContinue = OSc_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
-					OSc_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2);
+				shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
+					OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2);
 				break;
 			
 			case CHANNELS_3_:
-				shouldContinue = OSc_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
-					OSc_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
-					OSc_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3);
+				shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
+					OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
+					OScDev_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3);
 				break;
 			
 			case CHANNELS_4_:
 			default: // TODO Why is default 4?
-				shouldContinue = OSc_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
-					OSc_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
-					OSc_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3) &&
-					OSc_Acquisition_CallFrameCallback(acq, 3, kalmanBuffer4);
+				shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
+					OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
+					OScDev_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3) &&
+					OScDev_Acquisition_CallFrameCallback(acq, 3, kalmanBuffer4);
 				break;
 			}
 
@@ -1063,17 +1076,17 @@ static OSc_Error ReadImage(OSc_Device *device, OSc_Acquisition *acq, bool discar
 			}
 		}
 
-		return OSc_Error_OK;
+		return OScDev_OK;
 
 
 	
 }
 
 
-static OSc_Error AcquireFrame(OSc_Device *device, OSc_Acquisition *acq, unsigned kalmanCounter)
+static OScDev_Error AcquireFrame(OScDev_Device *device, OScDev_Acquisition *acq, unsigned kalmanCounter)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
-	// OSc_Return_If_Error(StartScan(device));
+	// if (OScDev_CHECK(err, StartScan(device))) {TODO}
 
 	bool lastOfKalmanAveraging = GetData(device)->kalmanProgressive ||
 		kalmanCounter + 1 == GetData(device)->kalmanFrames;
@@ -1083,22 +1096,24 @@ static OSc_Error AcquireFrame(OSc_Device *device, OSc_Acquisition *acq, unsigned
 
 	for (unsigned i = 0; i < GetData(device)->kalmanFrames; ++i)
 	{
-		char msg[OSc_MAX_STR_LEN + 1];
-		snprintf(msg, OSc_MAX_STR_LEN, "Image %d", thisImage);
-		OSc_Log_Debug(device, msg);
+		char msg[OScDev_MAX_STR_LEN + 1];
+		snprintf(msg, OScDev_MAX_STR_LEN, "Image %d", thisImage);
+		OScDev_Log_Debug(device, msg);
 		thisImage++;
 
-		OSc_Return_If_Error(ReadImage(device, acq, !lastOfKalmanAveraging));
-		OSc_Log_Debug(device, "Finished reading image");
+		OScDev_Error err;
+		if (OScDev_CHECK(err, ReadImage(device, acq, !lastOfKalmanAveraging)))
+			return err;
+		OScDev_Log_Debug(device, "Finished reading image");
 
 	}
 
 
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-static void FinishAcquisition(OSc_Device *device)
+static void FinishAcquisition(OScDev_Device *device)
 {
 	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	GetData(device)->acquisition.running = false;
@@ -1110,11 +1125,13 @@ static void FinishAcquisition(OSc_Device *device)
 
 static DWORD WINAPI AcquisitionLoop(void *param)
 {
-	OSc_Device *device = (OSc_Device *)param;
-	OSc_Acquisition *acq = GetData(device)->acquisition.acquisition;
+	OScDev_Device *device = (OScDev_Device *)param;
+	OScDev_Acquisition *acq = GetData(device)->acquisition.acquisition;
 
+	OScDev_Error err;
 	uint32_t acqNumFrames;
-	OSc_Return_If_Error(OSc_Acquisition_GetNumberOfFrames(acq, &acqNumFrames));
+	if (OScDev_CHECK(err, OScDev_Acquisition_GetNumberOfFrames(acq, &acqNumFrames)))
+		return err;
 
 	int totalFrames;
 	int thisFrame;
@@ -1125,29 +1142,32 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 	else
 		totalFrames = acqNumFrames * GetData(device)->kalmanFrames;
 
-	OSc_Return_If_Error(SetTaskParameters(device, totalFrames));
-	OSc_Return_If_Error(WaitTillIdle(device));
+	if (OScDev_CHECK(err, SetTaskParameters(device, totalFrames)))
+		return err;
+	if (OScDev_CHECK(err, WaitTillIdle(device)))
+		return err;
 
-	char msg[OSc_MAX_STR_LEN + 1];
-	snprintf(msg, OSc_MAX_STR_LEN, "%d Kalman images", GetData(device)->kalmanFrames);
-	OSc_Log_Debug(device, msg);
+	char msg[OScDev_MAX_STR_LEN + 1];
+	snprintf(msg, OScDev_MAX_STR_LEN, "%d Kalman images", GetData(device)->kalmanFrames);
+	OScDev_Log_Debug(device, msg);
 
-	snprintf(msg, OSc_MAX_STR_LEN, "%d number of frames", acqNumFrames);
-	OSc_Log_Debug(device, msg);
+	snprintf(msg, OScDev_MAX_STR_LEN, "%d number of frames", acqNumFrames);
+	OScDev_Log_Debug(device, msg);
 
-	snprintf(msg, OSc_MAX_STR_LEN, "%d total images", totalFrames);
-	OSc_Log_Debug(device, msg);
+	snprintf(msg, OScDev_MAX_STR_LEN, "%d total images", totalFrames);
+	OScDev_Log_Debug(device, msg);
 	
-	OSc_Log_Debug(device, "Starting acquisition loop...");
-	OSc_Return_If_Error(StartScan(device));
+	OScDev_Log_Debug(device, "Starting acquisition loop...");
+	if (OScDev_CHECK(err, StartScan(device)))
+		return err;
 
 	thisFrame = 1;
 
 	for (uint32_t frame = 0; frame < acqNumFrames; ++frame)
 	{
-		char msg[OSc_MAX_STR_LEN + 1];
-		snprintf(msg, OSc_MAX_STR_LEN, "Start frame %d", thisFrame);
-		OSc_Log_Debug(device, msg);
+		char msg[OScDev_MAX_STR_LEN + 1];
+		snprintf(msg, OScDev_MAX_STR_LEN, "Start frame %d", thisFrame);
+		OScDev_Log_Debug(device, msg);
 		thisFrame++;
 
 		bool stopRequested;
@@ -1156,22 +1176,23 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 		LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 		if (stopRequested)
 		{
-			OSc_Log_Debug(device, "User interruption...");
-			OSc_Return_If_Error(StopScan(device));
+			OScDev_Log_Debug(device, "User interruption...");
+			if (OScDev_CHECK(err, StopScan(device)))
+				return err;
 			GetData(device)->settingsChanged = true;
 			GetData(device)->reloadWaveformRequired = true;
 			break;
 		}
 
 
-		OSc_Error err;
-		if (OSc_Check_Error(err,
+		OScDev_Error err;
+		if (OScDev_CHECK(err,
 			AcquireFrame(device, acq, frame % GetData(device)->kalmanFrames)))
 		{
-			char msg[OSc_MAX_STR_LEN + 1];
-			snprintf(msg, OSc_MAX_STR_LEN,
+			char msg[OScDev_MAX_STR_LEN + 1];
+			snprintf(msg, OScDev_MAX_STR_LEN,
 				"Error during sequence acquisition: %d", (int)err);
-			OSc_Log_Error(device, msg);
+			OScDev_Log_Error(device, msg);
 			FinishAcquisition(device);
 			return 0;
 		}
@@ -1184,24 +1205,24 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 }
 
 
-OSc_Error RunAcquisitionLoop(OSc_Device *device, OSc_Acquisition *acq)
+OScDev_Error RunAcquisitionLoop(OScDev_Device *device, OScDev_Acquisition *acq)
 {
 	GetData(device)->acquisition.acquisition = acq;
 	DWORD id;
 	GetData(device)->acquisition.thread =
 		CreateThread(NULL, 0, AcquisitionLoop, device, 0, &id);
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-OSc_Error StopAcquisitionAndWait(OSc_Device *device, OSc_Acquisition *acq)
+OScDev_Error StopAcquisitionAndWait(OScDev_Device *device, OScDev_Acquisition *acq)
 {
 	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	{
 		if (!GetData(device)->acquisition.running)
 		{
 			LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
-			return OSc_Error_OK;
+			return OScDev_OK;
 		}
 
 		GetData(device)->acquisition.stopRequested = true;
@@ -1211,18 +1232,18 @@ OSc_Error StopAcquisitionAndWait(OSc_Device *device, OSc_Acquisition *acq)
 }
 
 
-OSc_Error IsAcquisitionRunning(OSc_Device *device, bool *isRunning)
+OScDev_Error IsAcquisitionRunning(OScDev_Device *device, bool *isRunning)
 {
 	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	*isRunning = GetData(device)->acquisition.running;
 	LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
-	return OSc_Error_OK;
+	return OScDev_OK;
 }
 
 
-OSc_Error WaitForAcquisitionToFinish(OSc_Device *device)
+OScDev_Error WaitForAcquisitionToFinish(OScDev_Device *device)
 {
-	OSc_Error err = OSc_Error_OK;
+	OScDev_Error err = OScDev_OK;
 	CONDITION_VARIABLE *cv = &(GetData(device)->acquisition.acquisitionFinishCondition);
 
 	EnterCriticalSection(&(GetData(device)->acquisition.mutex));

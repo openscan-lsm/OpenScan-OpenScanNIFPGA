@@ -1,6 +1,6 @@
 #pragma once
 
-#include "OpenScanDeviceImpl.h"
+#include "OpenScanDeviceLib.h"
 
 
-struct OSc_Device_Impl OpenScan_NIFPGA_Device_Impl;
+struct OScDev_DeviceImpl OpenScan_NIFPGA_Device_Impl;

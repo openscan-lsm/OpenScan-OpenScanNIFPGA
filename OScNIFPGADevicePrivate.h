@@ -2,7 +2,7 @@
 
 #include "OScNIFPGADevice.h"
 
-#include "OpenScanDeviceImpl.h"
+#include "OpenScanDeviceLib.h"
 
 #include <NiFpga.h>
 
@@ -25,11 +25,11 @@ enum
 
 struct OScNIFPGAPrivateData
 {
-	char rioResourceName[OSc_MAX_STR_LEN + 1];
+	char rioResourceName[OScDev_MAX_STR_LEN + 1];
 	NiFpga_Session niFpgaSession;
-	char bitfile[OSc_MAX_STR_LEN + 1];
+	char bitfile[OScDev_MAX_STR_LEN + 1];
 
-	OSc_Setting **settings;
+	OScDev_Setting **settings;
 	size_t settingCount;
 
 	bool settingsChanged;
@@ -66,21 +66,15 @@ struct OScNIFPGAPrivateData
 		bool armed; // Valid when running == true
 		bool started; // Valid when running == true
 		bool stopRequested; // Valid when running == true
-		OSc_Acquisition *acquisition;
+		OScDev_Acquisition *acquisition;
 	} acquisition;
 };
 
 
-static inline struct OScNIFPGAPrivateData *GetData(OSc_Device *device)
+static inline struct OScNIFPGAPrivateData *GetData(OScDev_Device *device)
 {
-	return (struct OScNIFPGAPrivateData *)OSc_Device_GetImplData(device);
+	return (struct OScNIFPGAPrivateData *)OScDev_Device_GetImplData(device);
 }
 
 
-static inline struct OScNIFPGAPrivateData *GetSettingDeviceData(OSc_Setting *setting)
-{
-	return GetData(OSc_Setting_GetDevice(setting));
-}
-
-
-OSc_Error PrepareSettings(OSc_Device *device);
+OScDev_Error PrepareSettings(OScDev_Device *device);
