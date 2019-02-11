@@ -2,20 +2,20 @@
 
 #include "OScNIFPGADevicePrivate.h"
 
-OSc_Error EnumerateInstances(OSc_Device ***devices, size_t *deviceCount);
-OSc_Error OpenFPGA(OSc_Device *device);
-OSc_Error CloseFPGA(OSc_Device *device);
-OSc_Error StartFPGA(OSc_Device *device);
-OSc_Error SetScanParameters(OSc_Device *device);
-OSc_Error ReloadWaveform(OSc_Device *device);
-OSc_Error WaitTillIdle(OSc_Device *device);
-OSc_Error SetBuildInParameters(OSc_Device *device);
-OSc_Error SetPixelParameters(OSc_Device *device, double scanRate);
-OSc_Error SetResolutionParameters(OSc_Device *device, uint32_t resolution);
-OSc_Error SetTaskParameters(OSc_Device *device, uint32_t nf);
-OSc_Error Cleanflags(OSc_Device *device);
-OSc_Error InitScan(OSc_Device *device);
-OSc_Error RunAcquisitionLoop(OSc_Device *device, OSc_Acquisition *acq);
-OSc_Error StopAcquisitionAndWait(OSc_Device *device, OSc_Acquisition *acq);
-OSc_Error IsAcquisitionRunning(OSc_Device *device, bool *isRunning);
-OSc_Error WaitForAcquisitionToFinish(OSc_Device *device);
+OScDev_Error EnumerateInstances(OScDev_Device ***devices, size_t *deviceCount);
+OScDev_Error OpenFPGA(OScDev_Device *device);
+OScDev_Error CloseFPGA(OScDev_Device *device);
+OScDev_Error StartFPGA(OScDev_Device *device);
+OScDev_Error SetScanParameters(OScDev_Device *device);
+OScDev_Error ReloadWaveform(OScDev_Device *device);
+OScDev_Error WaitTillIdle(OScDev_Device *device);
+OScDev_Error SetBuildInParameters(OScDev_Device *device);
+OScDev_Error SetPixelParameters(OScDev_Device *device, double scanRate);
+OScDev_Error SetResolutionParameters(OScDev_Device *device, uint32_t resolution);
+OScDev_Error SetTaskParameters(OScDev_Device *device, uint32_t nf);
+OScDev_Error Cleanflags(OScDev_Device *device);
+OScDev_Error InitScan(OScDev_Device *device);
+OScDev_Error RunAcquisitionLoop(OScDev_Device *device, OScDev_Acquisition *acq);
+OScDev_Error StopAcquisitionAndWait(OScDev_Device *device, OScDev_Acquisition *acq);
+OScDev_Error IsAcquisitionRunning(OScDev_Device *device, bool *isRunning);
+OScDev_Error WaitForAcquisitionToFinish(OScDev_Device *device);
