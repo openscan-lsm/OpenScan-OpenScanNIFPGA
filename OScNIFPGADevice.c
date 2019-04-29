@@ -57,11 +57,17 @@ static OScDev_Error NIFPGAOpen(OScDev_Device *device)
 
 static OScDev_Error NIFPGAClose(OScDev_Device *device)
 {
-	StopAcquisitionAndWait(device, GetData(device)->acquisition.acquisition);
+	StopAcquisitionAndWait(device);
 	OScDev_Error err = CloseFPGA(device);
 	return err;
 }
 
+
+static OScDev_Error NIFPGAHasClock(OScDev_Device *device, bool *hasClock)
+{
+	*hasClock = false;  // TODO: clock is not decoupled from scanner in current FPGA code
+	return OScDev_OK;
+}
 
 static OScDev_Error NIFPGAHasScanner(OScDev_Device *device, bool *hasScanner)
 {
@@ -172,8 +178,46 @@ static OScDev_Error NIFPGAGetBytesPerSample(OScDev_Device *device, uint32_t *byt
 }
 
 
-static OScDev_Error ArmImpl(OScDev_Device *device, OScDev_Acquisition *acq)
+static OScDev_Error NIFPGAArm(OScDev_Device *device, OScDev_Acquisition *acq)
 {
+	bool useClock, useScanner, useDetector;
+	OScDev_Acquisition_IsClockRequested(acq, &useClock);
+	OScDev_Acquisition_IsScannerRequested(acq, &useScanner);
+	OScDev_Acquisition_IsDetectorRequested(acq, &useDetector);
+
+	// assume scanner is always enabled
+	if (!useClock || !useScanner)
+		return OScDev_Error_Unsupported_Operation;
+
+	enum OScDev_TriggerSource clockStartTriggerSource;
+	OScDev_Acquisition_GetClockStartTriggerSource(acq, &clockStartTriggerSource);
+	if (clockStartTriggerSource != OScDev_TriggerSource_Software)
+		return OScDev_Error_Unsupported_Operation;
+
+	enum OScDev_ClockSource clockSource;
+	OScDev_Acquisition_GetClockSource(acq, &clockSource);
+	if (clockSource != OScDev_ClockSource_Internal)
+		return OScDev_Error_Unsupported_Operation;
+	// what if we use external line clock to trigger acquisition?
+
+	if (useDetector)
+	{
+		// arm scanner/clock and detector
+		GetData(device)->detectorEnabled = true;
+	}
+	else
+	{
+		// arm scanner and clock and disable detector
+		GetData(device)->detectorEnabled = false;
+	}
+
+	if (useScanner)
+	{
+		GetData(device)->scannerEnabled = true;
+	}
+	else
+		GetData(device)->scannerEnabled = false;
+	
 	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	{
 		if (GetData(device)->acquisition.running &&
@@ -243,17 +287,13 @@ static OScDev_Error ArmImpl(OScDev_Device *device, OScDev_Acquisition *acq)
 	LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 
 	return OScDev_OK;
+
 }
 
 
-static OScDev_Error NIFPGAArmScanner(OScDev_Device *device, OScDev_Acquisition *acq)
+static OScDev_Error NIFPGAStart(OScDev_Device *device)
 {
-	return ArmImpl(device, acq);
-}
-
-
-static OScDev_Error NIFPGAStartScanner(OScDev_Device *device, OScDev_Acquisition *acq)
-{
+	// start scanner
 	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	{
 		if (!GetData(device)->acquisition.running ||
@@ -272,32 +312,15 @@ static OScDev_Error NIFPGAStartScanner(OScDev_Device *device, OScDev_Acquisition
 	}
 	LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 
-	return RunAcquisitionLoop(device, acq);
-}
-
-
-static OScDev_Error NIFPGAStopScanner(OScDev_Device *device, OScDev_Acquisition *acq)
-{
-	return StopAcquisitionAndWait(device, acq);
-}
-
-
-static OScDev_Error NIFPGAArmDetector(OScDev_Device *device, OScDev_Acquisition *acq)
-{
-	return ArmImpl(device, acq);
-}
-
-
-static OScDev_Error NIFPGAStartDetector(OScDev_Device *device, OScDev_Acquisition *acq)
-{
 	// We don't yet support running detector as trigger source
-	return OScDev_Error_Unsupported_Operation;
+
+	return RunAcquisitionLoop(device);
 }
 
 
-static OScDev_Error NIFPGAStopDetector(OScDev_Device *device, OScDev_Acquisition *acq)
+static OScDev_Error NIFPGAStop(OScDev_Device *device)
 {
-	return StopAcquisitionAndWait(device, acq);
+	return StopAcquisitionAndWait(device);
 }
 
 
@@ -320,6 +343,7 @@ struct OScDev_DeviceImpl OpenScan_NIFPGA_Device_Impl = {
 	.GetName = NIFPGAGetName,
 	.Open = NIFPGAOpen,
 	.Close = NIFPGAClose,
+	.HasClock = NIFPGAHasClock,
 	.HasScanner = NIFPGAHasScanner,
 	.HasDetector = NIFPGAHasDetector,
 	.GetSettings = NIFPGAGetSettings,
@@ -331,12 +355,9 @@ struct OScDev_DeviceImpl OpenScan_NIFPGA_Device_Impl = {
 	.GetImageSize = NIFPGAGetImageSize,
 	.GetNumberOfChannels = NIFPGAGetNumberOfChannels,
 	.GetBytesPerSample = NIFPGAGetBytesPerSample,
-	.ArmScanner = NIFPGAArmScanner,
-	.StartScanner = NIFPGAStartScanner,
-	.StopScanner = NIFPGAStopScanner,
-	.ArmDetector =  NIFPGAArmDetector,
-	.StartDetector = NIFPGAStartDetector,
-	.StopDetector = NIFPGAStopDetector,
+	.Arm = NIFPGAArm,
+	.Start = NIFPGAStart,
+	.Stop = NIFPGAStop,
 	.IsRunning = NIFPGAIsRunning,
 	.Wait = NIFPGAWait,
 };

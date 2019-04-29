@@ -1205,9 +1205,8 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 }
 
 
-OScDev_Error RunAcquisitionLoop(OScDev_Device *device, OScDev_Acquisition *acq)
+OScDev_Error RunAcquisitionLoop(OScDev_Device *device)
 {
-	GetData(device)->acquisition.acquisition = acq;
 	DWORD id;
 	GetData(device)->acquisition.thread =
 		CreateThread(NULL, 0, AcquisitionLoop, device, 0, &id);
@@ -1215,7 +1214,7 @@ OScDev_Error RunAcquisitionLoop(OScDev_Device *device, OScDev_Acquisition *acq)
 }
 
 
-OScDev_Error StopAcquisitionAndWait(OScDev_Device *device, OScDev_Acquisition *acq)
+OScDev_Error StopAcquisitionAndWait(OScDev_Device *device)
 {
 	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	{
