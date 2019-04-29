@@ -65,7 +65,7 @@ static OScDev_Error NIFPGAClose(OScDev_Device *device)
 
 static OScDev_Error NIFPGAHasClock(OScDev_Device *device, bool *hasClock)
 {
-	*hasClock = false;  // TODO: clock is not decoupled from scanner in current FPGA code
+	*hasClock = true;  // TODO: clock is not decoupled from scanner in current FPGA code
 	return OScDev_OK;
 }
 
