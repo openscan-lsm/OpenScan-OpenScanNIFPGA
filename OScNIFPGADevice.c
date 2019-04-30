@@ -229,6 +229,9 @@ static OScDev_Error NIFPGAArm(OScDev_Device *device, OScDev_Acquisition *acq)
 			else
 				return OScDev_OK;
 		}
+
+		GetData(device)->acquisition.acquisition = acq;
+
 		GetData(device)->acquisition.stopRequested = false;
 		GetData(device)->acquisition.running = true;
 		GetData(device)->acquisition.armed = false;
