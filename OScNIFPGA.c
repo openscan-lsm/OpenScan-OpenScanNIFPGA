@@ -1045,6 +1045,11 @@ static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bo
 				kalmanBuffer4[i] = (uint16_t)(rawAndAveraged4[i] >> 16);
 			}
 
+			free(imageBuffer);
+			free(imageBuffer2);
+			free(imageBuffer3);
+			free(imageBuffer4);
+
 			bool shouldContinue;
 			switch (GetData(device)->channels)
 			{
@@ -1072,10 +1077,20 @@ static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bo
 				break;
 			}
 
+			free(kalmanBuffer);
+			free(kalmanBuffer2);
+			free(kalmanBuffer3);
+			free(kalmanBuffer4);
+
 			if (!shouldContinue) {
 				// TODO We should use the return value of the frame callback to halt acquisition
 			}
 		}
+
+		free(rawAndAveraged);
+		free(rawAndAveraged2);
+		free(rawAndAveraged3);
+		free(rawAndAveraged4);
 
 		return OScDev_OK;
 
