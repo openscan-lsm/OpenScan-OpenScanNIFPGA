@@ -22,16 +22,17 @@ VoltsToDACUnits(double p, double zoom, double galvoOffset, uint16_t *result)
 
 
 int
-GenerateScaledWaveforms(uint32_t resolution, double zoom, uint16_t *xScaled, uint16_t *yScaled,
+GenerateScaledWaveforms(uint32_t resolution, double zoom, uint32_t lineDelay,
+	uint16_t *xScaled, uint16_t *yScaled,
 	double galvoOffsetX, double galvoOffsetY)
 {
-	size_t xLength = X_UNDERSHOOT + resolution + X_RETRACE_LEN;
+	size_t xLength = lineDelay + resolution + X_RETRACE_LEN;
 	size_t yLength = resolution + Y_RETRACE_LEN;
 
 	double *xWaveform = (double *)malloc(sizeof(double) * xLength);
 	double *yWaveform = (double *)malloc(sizeof(double) * yLength);
 
-	GenerateGalvoWaveform(resolution, X_RETRACE_LEN, X_UNDERSHOOT, -0.5, 0.5, xWaveform);
+	GenerateGalvoWaveform(resolution, X_RETRACE_LEN, lineDelay, -0.5, 0.5, xWaveform);
 	GenerateGalvoWaveform(resolution, Y_RETRACE_LEN, 0, -0.5, 0.5, yWaveform);
 
 	for (int i = 0; i < xLength; ++i) {

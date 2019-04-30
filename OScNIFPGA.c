@@ -58,6 +58,7 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 	data->scanRate = 0.2;
 	data->resolution = 512;
 	data->zoom = 1.25;
+	data->lineDelay = 50;
 	data->magnification = 1.0;
 	data->offsetXY[0] = data->offsetXY[1] = 0.0;
 	data->channels = CHANNELS_1_;
@@ -201,7 +202,7 @@ static OScDev_Error SendParameters(OScDev_Device *device)
 
 	NiFpga_Status stat;
 	stat = NiFpga_WriteI32(session,
-		NiFpga_OpenScanFPGAHost_ControlI32_Numofundershoot, X_UNDERSHOOT);
+		NiFpga_OpenScanFPGAHost_ControlI32_Numofundershoot, GetData(device)->lineDelay);
 	if (NiFpga_IsError(stat))
 		return stat;
 	stat = NiFpga_WriteI32(session,
@@ -242,7 +243,7 @@ static OScDev_Error SetResolution(OScDev_Device *device, uint32_t resolution)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
-	int32_t elementsPerLine = X_UNDERSHOOT + resolution + X_RETRACE_LEN;
+	int32_t elementsPerLine = GetData(device)->lineDelay + resolution + X_RETRACE_LEN;
 
 	NiFpga_Status stat = NiFpga_WriteI32(session,
 		NiFpga_OpenScanFPGAHost_ControlI32_Resolution, resolution);
@@ -340,14 +341,14 @@ static OScDev_Error WriteWaveforms(OScDev_Device *device, uint16_t *firstX, uint
 	double offsetY = GetData(device)->offsetXY[1];
 
 	uint32_t elementsPerLine =
-		X_UNDERSHOOT + resolution + X_RETRACE_LEN;
+		GetData(device)->lineDelay + resolution + X_RETRACE_LEN;
 	uint32_t elementsPerRow = resolution + Y_RETRACE_LEN;
 	uint16_t *xScaled = (uint16_t *)malloc(sizeof(uint16_t) * elementsPerLine);
 	uint16_t *yScaled = (uint16_t *)malloc(sizeof(uint16_t) * elementsPerRow);
 
 	OScDev_Error err;
-	if (OScDev_CHECK(err, GenerateScaledWaveforms(resolution, 0.25 * zoom,
-		xScaled, yScaled, offsetX, offsetY)))
+	if (OScDev_CHECK(err, GenerateScaledWaveforms(resolution, 0.25 * zoom, 
+		GetData(device)->lineDelay, xScaled, yScaled, offsetX, offsetY)))
 		return OScDev_Error_Waveform_Out_Of_Range;
 
 	NiFpga_Status stat;
@@ -523,7 +524,7 @@ OScDev_Error SetPixelParameters(OScDev_Device *device, double scanRate)
 OScDev_Error SetResolutionParameters(OScDev_Device *device, uint32_t resolution) 
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
-	int32_t elementsPerLine = X_UNDERSHOOT + resolution + X_RETRACE_LEN;
+	int32_t elementsPerLine = GetData(device)->lineDelay + resolution + X_RETRACE_LEN;
 	uint32_t elementsPerRow = resolution + Y_RETRACE_LEN;
 
 	NiFpga_Status stat = NiFpga_WriteI32(session,
@@ -559,7 +560,7 @@ OScDev_Error SetResolutionParameters(OScDev_Device *device, uint32_t resolution)
 	if (NiFpga_IsError(stat))
 		return stat;
 	stat = NiFpga_WriteI32(session,
-		NiFpga_OpenScanFPGAHost_ControlI32_Numofundershoot, X_UNDERSHOOT);
+		NiFpga_OpenScanFPGAHost_ControlI32_Numofundershoot, GetData(device)->lineDelay);
 	if (NiFpga_IsError(stat))
 		return stat;
 
