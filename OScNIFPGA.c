@@ -303,34 +303,6 @@ static OScDev_Error SetKalmanGain(OScDev_Device *device, double kg)
 }
 
 
-OScDev_Error SetScanParameters(OScDev_Device *device)
-{
-	NiFpga_Session session = GetData(device)->niFpgaSession;
-
-	NiFpga_Status stat = NiFpga_WriteI32(session,
-		NiFpga_OpenScanFPGAHost_ControlI32_Numberofframes, GetData(device)->nFrames);
-	if (NiFpga_IsError(stat))
-		return stat;
-	//need to set kalman factor
-	stat = NiFpga_WriteU16(session,
-		NiFpga_OpenScanFPGAHost_ControlU16_Kalmanfactor, GetData(device)->kalmanFrames);
-	if (NiFpga_IsError(stat))
-		return stat;
-
-	GetData(device)->filterGain = 65534; // TODO See also default parameters
-	stat = NiFpga_WriteU16(session,
-		NiFpga_OpenScanFPGAHost_ControlU16_Filtergain,
-		GetData(device)->filterGain);
-	if (NiFpga_IsError(stat))
-		return stat;
-	int err = SetKalmanGain(device, 1.0);
-	if (err != OScDev_OK)
-		return err;
-
-	return OScDev_OK;
-}
-
-
 static OScDev_Error WriteWaveforms(OScDev_Device *device, uint16_t *firstX, uint16_t *firstY)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
@@ -380,20 +352,6 @@ static OScDev_Error WriteWaveforms(OScDev_Device *device, uint16_t *firstX, uint
 			xy[i] = ((uint32_t)xScaled[i] << 16) | yScaled[j];
 		}
 
-		/*NiFpga_Bool dramFull = false;
-		stat = NiFpga_ReadBool(session, NiFpga_OpenScanFPGAHost_IndicatorBool_WriteDRAMdone, &dramFull);
-		if (NiFpga_IsError(stat))
-			goto error;
-		if (dramFull)
-		{
-			char msg[OScDev_MAX_STR_LEN + 1];
-			snprintf(msg, OScDev_MAX_STR_LEN, "FPGA DRAM full; wrote %u lines of %d",
-				j, (int)resolution);
-			OScDev_Log_Error(device, msg);
-			stat = OScDev_Error_Waveform_Memory_Size_Mismatch;
-			goto error;
-		}*/
-
 		size_t remaining;
 		stat = NiFpga_WriteFifoU32(session,
 			NiFpga_OpenScanFPGAHost_HostToTargetFifoU32_HosttotargetFIFO,
@@ -401,30 +359,8 @@ static OScDev_Error WriteWaveforms(OScDev_Device *device, uint16_t *firstX, uint
 		if (NiFpga_IsError(stat))
 			goto error;
 
-		/*bool done = false;
-		while (!done)
-		{
-			stat = NiFpga_WriteFifoU32(session,
-				NiFpga_OpenScanFPGAHost_HostToTargetFifoU32_HosttotargetFIFO,
-				0, 0, 10000, &remaining);
-			if (remaining == fifoSize)
-				done = true;
-		}*/
 		Sleep(1);
 	}
-
-
-
-	/*NiFpga_Bool dramFull = false;
-	stat = NiFpga_ReadBool(session, NiFpga_OpenScanFPGAHost_IndicatorBool_WriteDRAMdone, &dramFull);
-	if (NiFpga_IsError(stat))
-		goto error;
-	if (!dramFull)
-	{
-		stat = OScDev_Error_Waveform_Memory_Size_Mismatch;
-		OScDev_Log_Error(device, "FPGA DRAM not full after writing all lines");
-		goto error;
-	}*/
 
 	*firstX = xScaled[0];
 	*firstY = yScaled[0];
@@ -1153,8 +1089,6 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 	int thisFrame;
 	if (acqNumFrames == INT32_MAX)
 		totalFrames = INT32_MAX;
-	//else if (GetData(device)->kalmanProgressive)
-	// 	totalFrames = acq->numberOfFrames * GetData(device)->kalmanFrames;
 	else
 		totalFrames = acqNumFrames * GetData(device)->kalmanFrames;
 
@@ -1214,8 +1148,6 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 		}
 	}
 
-	// GetData(device)->settingsChanged = true;
-	// GetData(device)->reloadWaveformRequired = true;
 	FinishAcquisition(device);
 	return 0;
 }

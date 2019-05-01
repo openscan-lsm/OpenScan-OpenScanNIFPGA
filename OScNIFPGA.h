@@ -6,7 +6,6 @@ OScDev_Error EnumerateInstances(OScDev_Device ***devices, size_t *deviceCount);
 OScDev_Error OpenFPGA(OScDev_Device *device);
 OScDev_Error CloseFPGA(OScDev_Device *device);
 OScDev_Error StartFPGA(OScDev_Device *device);
-OScDev_Error SetScanParameters(OScDev_Device *device);
 OScDev_Error ReloadWaveform(OScDev_Device *device);
 OScDev_Error WaitTillIdle(OScDev_Device *device);
 OScDev_Error SetBuildInParameters(OScDev_Device *device);
