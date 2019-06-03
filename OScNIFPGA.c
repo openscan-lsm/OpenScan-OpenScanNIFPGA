@@ -57,7 +57,7 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 	data->reloadWaveformRequired = true;
 	data->scanRate = 0.2;
 	data->resolution = 512;
-	data->zoom = 1.25;
+	data->zoom = 1.0;
 	data->lineDelay = 50;
 	data->magnification = 1.0;
 	data->offsetXY[0] = data->offsetXY[1] = 0.0;
