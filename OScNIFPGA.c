@@ -959,107 +959,85 @@ static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bo
 			return stat;
 	}
 
-		if (!discard)
-		{
-			uint16_t *imageBuffer = malloc(sizeof(uint16_t) * nPixels);
-			uint16_t *kalmanBuffer = malloc(sizeof(uint16_t) * nPixels);
-			uint16_t *imageBuffer2 = malloc(sizeof(uint16_t) * nPixels);
-			uint16_t *kalmanBuffer2 = malloc(sizeof(uint16_t) * nPixels);
-			uint16_t *imageBuffer3 = malloc(sizeof(uint16_t) * nPixels);
-			uint16_t *kalmanBuffer3 = malloc(sizeof(uint16_t) * nPixels);
-			uint16_t *imageBuffer4 = malloc(sizeof(uint16_t) * nPixels);
-			uint16_t *kalmanBuffer4 = malloc(sizeof(uint16_t) * nPixels);
+	if (!discard)
+	{
+		uint16_t *kalmanBuffer = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *kalmanBuffer2 = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *kalmanBuffer3 = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *kalmanBuffer4 = malloc(sizeof(uint16_t) * nPixels);
 
-			for (size_t i = 0; i < nPixels; ++i) {
-				imageBuffer[i] = (uint16_t)(rawAndAveraged[i]);
-				kalmanBuffer[i] = (uint16_t)(rawAndAveraged[i] >> 16);
-				imageBuffer2[i] = (uint16_t)(rawAndAveraged2[i]);
-				kalmanBuffer2[i] = (uint16_t)(rawAndAveraged2[i] >> 16);
-				imageBuffer3[i] = (uint16_t)(rawAndAveraged3[i]);
-				kalmanBuffer3[i] = (uint16_t)(rawAndAveraged3[i] >> 16);
-				imageBuffer4[i] = (uint16_t)(rawAndAveraged4[i]);
-				kalmanBuffer4[i] = (uint16_t)(rawAndAveraged4[i] >> 16);
-			}
-
-			free(imageBuffer);
-			free(imageBuffer2);
-			free(imageBuffer3);
-			free(imageBuffer4);
-
-			bool shouldContinue;
-			switch (GetData(device)->channels)
-			{
-			case CHANNELS_1_:
-				shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer);
-				break;
-
-			case CHANNELS_2_:
-				shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
-					OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2);
-				break;
-			
-			case CHANNELS_3_:
-				shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
-					OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
-					OScDev_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3);
-				break;
-			
-			case CHANNELS_4_:
-			default: // TODO Why is default 4?
-				shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
-					OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
-					OScDev_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3) &&
-					OScDev_Acquisition_CallFrameCallback(acq, 3, kalmanBuffer4);
-				break;
-			}
-
-			free(kalmanBuffer);
-			free(kalmanBuffer2);
-			free(kalmanBuffer3);
-			free(kalmanBuffer4);
-
-			if (!shouldContinue) {
-				// TODO We should use the return value of the frame callback to halt acquisition
-			}
+		for (size_t i = 0; i < nPixels; ++i) {
+			kalmanBuffer[i] = (uint16_t)(rawAndAveraged[i] >> 16);
+			kalmanBuffer2[i] = (uint16_t)(rawAndAveraged2[i] >> 16);
+			kalmanBuffer3[i] = (uint16_t)(rawAndAveraged3[i] >> 16);
+			kalmanBuffer4[i] = (uint16_t)(rawAndAveraged4[i] >> 16);
 		}
 
-		free(rawAndAveraged);
-		free(rawAndAveraged2);
-		free(rawAndAveraged3);
-		free(rawAndAveraged4);
+		bool shouldContinue;
+		char msg[OScDev_MAX_STR_LEN + 1];
+		snprintf(msg, sizeof(msg), "Sending %d channels", GetData(device)->channels + 1);
+		OScDev_Log_Debug(device, msg);
+		switch (GetData(device)->channels)
+		{
+		case CHANNELS_1_:
+			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer);
+			break;
 
-		return OScDev_OK;
+		case CHANNELS_2_:
+			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2);
+			break;
 
+		case CHANNELS_3_:
+			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3);
+			break;
 
-	
+		case CHANNELS_4_:
+		default: // TODO Why is default 4?
+			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 3, kalmanBuffer4);
+			break;
+		}
+
+		free(kalmanBuffer);
+		free(kalmanBuffer2);
+		free(kalmanBuffer3);
+		free(kalmanBuffer4);
+
+		if (!shouldContinue) {
+			// TODO We should use the return value of the frame callback to halt acquisition
+		}
+	}
+
+	free(rawAndAveraged);
+	free(rawAndAveraged2);
+	free(rawAndAveraged3);
+	free(rawAndAveraged4);
+
+	return OScDev_OK;
 }
 
 
 static OScDev_Error AcquireFrame(OScDev_Device *device, OScDev_Acquisition *acq, unsigned kalmanCounter)
 {
-	NiFpga_Session session = GetData(device)->niFpgaSession;
-	// if (OScDev_CHECK(err, StartScan(device))) {TODO}
-
-	bool lastOfKalmanAveraging = GetData(device)->kalmanProgressive ||
+	bool shouldKeepImage = GetData(device)->kalmanProgressive ||
 		kalmanCounter + 1 == GetData(device)->kalmanFrames;
-
-	int thisImage;
-	thisImage = 1;
 
 	for (unsigned i = 0; i < GetData(device)->kalmanFrames; ++i)
 	{
 		char msg[OScDev_MAX_STR_LEN + 1];
-		snprintf(msg, OScDev_MAX_STR_LEN, "Image %d", thisImage);
+		snprintf(msg, OScDev_MAX_STR_LEN, "Image %d", i + 1);
 		OScDev_Log_Debug(device, msg);
-		thisImage++;
 
 		OScDev_Error err;
-		if (OScDev_CHECK(err, ReadImage(device, acq, !lastOfKalmanAveraging)))
+		if (OScDev_CHECK(err, ReadImage(device, acq, !shouldKeepImage)))
 			return err;
 		OScDev_Log_Debug(device, "Finished reading image");
-
 	}
-
 
 	return OScDev_OK;
 }
