@@ -47,6 +47,10 @@ static OScDev_Error SetScanRate(OScDev_Setting *setting, double value)
 static OScDev_Error GetScanRateValues(OScDev_Setting *setting, double **values, size_t *count)
 {
 	static double v[] = {
+		1.0e-4,
+		2.0e-4,
+		2.5e-4,
+		5.0e-4,
 		0.001,
 		0.0025,
 		0.005,

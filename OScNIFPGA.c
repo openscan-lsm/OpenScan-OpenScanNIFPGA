@@ -757,14 +757,20 @@ static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bo
 		size_t available4 = 0;
 		size_t remaining4 = 0;
 
-		int32_t loopcount = 0;
-
+		uint32_t elementsPerLine = GetData(device)->lineDelay + GetData(device)->resolution + X_RETRACE_LEN;
+		uint32_t scanLines = GetData(device)->resolution;
+		uint32_t yLen = GetData(device)->resolution + Y_RETRACE_LEN;
+		uint32_t estFrameTimeMs = (uint32_t)(1E-3 * (double)(elementsPerLine * yLen / GetData(device)->scanRate));
+		char msg[OScDev_MAX_STR_LEN + 1];
+		snprintf(msg, OScDev_MAX_STR_LEN, "Estimated time per frame: %d (msec)", estFrameTimeMs);
+		OScDev_Log_Debug(device, msg);
+		uint32_t totalWaitTimeMs = 0;
 
 		//Begin reading only when there is data input into FIFO
 		while (!(available && available2 && available3 && available4))
 		{
-			loopcount++;
-			if (loopcount > 5000)
+			totalWaitTimeMs += 5;
+			if (totalWaitTimeMs > 2 * estFrameTimeMs)
 			{
 				char msg[OScDev_MAX_STR_LEN + 1];
 				snprintf(msg, OScDev_MAX_STR_LEN, "Scan timeout");
@@ -799,12 +805,12 @@ static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bo
 			Sleep(5);
 		}
 
-		loopcount = 0;
+		totalWaitTimeMs = 0;
 
 		while ((readSoFar < nPixels) || (readSoFar2 < nPixels) || (readSoFar3 < nPixels) || (readSoFar4 < nPixels))
 		{
-			loopcount++;
-			if (loopcount > 1000)
+			totalWaitTimeMs += 5;
+			if (totalWaitTimeMs > 2 * estFrameTimeMs)
 			{
 				char msg[OScDev_MAX_STR_LEN + 1];
 				snprintf(msg, OScDev_MAX_STR_LEN, "Read image timeout");
