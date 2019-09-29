@@ -55,7 +55,7 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 
 	data->settingsChanged = true;
 	data->reloadWaveformRequired = true;
-	data->scanRate = 0.2;
+	data->scanRate = 200.0;
 	data->resolution = 512;
 	data->zoom = 1.0;
 	data->lineDelay = 50;
@@ -223,7 +223,7 @@ static OScDev_Error SetScanRate(OScDev_Device *device, double scanRate)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
-	double pixelTime = 40.0 / scanRate;
+	double pixelTime = 40.0 * 1000.0 / scanRate;
 	int32_t pixelTimeTicks = (int32_t)round(pixelTime);
 	NiFpga_Status stat = NiFpga_WriteI32(session,
 		NiFpga_OpenScanFPGAHost_ControlI32_Pixeltimetick, pixelTimeTicks);
@@ -438,7 +438,7 @@ OScDev_Error SetBuildInParameters(OScDev_Device *device)
 OScDev_Error SetPixelParameters(OScDev_Device *device, double scanRate)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
-	double pixelTime = 40.0 / scanRate;
+	double pixelTime = 40.0 * 1000.0 / scanRate;
 	int32_t pixelTimeTicks = (int32_t)round(pixelTime);
 	NiFpga_Status stat = NiFpga_WriteI32(session,
 		NiFpga_OpenScanFPGAHost_ControlI32_Pixeltimetick, pixelTimeTicks);
@@ -760,7 +760,7 @@ static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bo
 		uint32_t elementsPerLine = GetData(device)->lineDelay + GetData(device)->resolution + X_RETRACE_LEN;
 		uint32_t scanLines = GetData(device)->resolution;
 		uint32_t yLen = GetData(device)->resolution + Y_RETRACE_LEN;
-		uint32_t estFrameTimeMs = (uint32_t)(1E-3 * (double)(elementsPerLine * yLen / GetData(device)->scanRate));
+		uint32_t estFrameTimeMs = (uint32_t)(elementsPerLine * yLen / GetData(device)->scanRate);
 		char msg[OScDev_MAX_STR_LEN + 1];
 		snprintf(msg, OScDev_MAX_STR_LEN, "Estimated time per frame: %d (msec)", estFrameTimeMs);
 		OScDev_Log_Debug(device, msg);
