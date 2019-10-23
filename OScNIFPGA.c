@@ -11,6 +11,8 @@
 #include <Windows.h>
 
 
+// TODO Instead of reference counting NiFpga initialization,
+// use the OScDev_ModuleImpl Open() and Close() functions.
 static bool g_NiFpga_initialized = false;
 static size_t g_openDeviceCount = 0;
 
@@ -55,11 +57,7 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 
 	data->settingsChanged = true;
 	data->reloadWaveformRequired = true;
-	data->scanRate = 200.0;
-	data->resolution = 512;
-	data->zoom = 1.0;
 	data->lineDelay = 50;
-	data->magnification = 1.0;
 	data->offsetXY[0] = data->offsetXY[1] = 0.0;
 	data->channels = CHANNELS_1_;
 	data->kalmanProgressive = true;
@@ -67,7 +65,6 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 	data->scannerEnabled = true;
 	data->filterGain = 0.99; // TODO This is probably wrong; see also SetScanParameters
 	data->kalmanFrames = 1;
-	data->nFrames = 1;
 
 	InitializeCriticalSection(&(data->acquisition.mutex));
 	data->acquisition.thread = NULL;
@@ -80,7 +77,7 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 }
 
 
-OScDev_Error EnumerateInstances(OScDev_Device ***devices, size_t *deviceCount)
+OScDev_Error EnumerateInstances(OScDev_PtrArray **devices)
 {
 	OScDev_Error err;
 	if (OScDev_CHECK(err, EnsureNiFpgaInitialized()))
@@ -103,10 +100,8 @@ OScDev_Error EnumerateInstances(OScDev_Device ***devices, size_t *deviceCount)
 
 	PopulateDefaultParameters(GetData(device));
 
-	*devices = malloc(sizeof(OScDev_Device *));
-	*deviceCount = 1;
-	(*devices)[0] = device;
-
+	*devices = OScDev_PtrArray_Create();
+	OScDev_PtrArray_Append(*devices, device);
 	return OScDev_OK;
 }
 
@@ -303,12 +298,12 @@ static OScDev_Error SetKalmanGain(OScDev_Device *device, double kg)
 }
 
 
-static OScDev_Error WriteWaveforms(OScDev_Device *device, uint16_t *firstX, uint16_t *firstY)
+static OScDev_Error WriteWaveforms(OScDev_Device *device, OScDev_Acquisition *acq, uint16_t *firstX, uint16_t *firstY)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 
-	uint32_t resolution = GetData(device)->resolution;
-	double zoom = GetData(device)->zoom;
+	uint32_t resolution = OScDev_Acquisition_GetResolution(acq);
+	double zoom = OScDev_Acquisition_GetZoomFactor(acq);
 	double offsetX = GetData(device)->offsetXY[0];
 	double offsetY = GetData(device)->offsetXY[1];
 
@@ -390,13 +385,13 @@ static OScDev_Error MoveGalvosTo(OScDev_Device *device, uint16_t x, uint16_t y)
 }
 
 
-OScDev_Error ReloadWaveform(OScDev_Device *device)
+OScDev_Error ReloadWaveform(OScDev_Device *device, OScDev_Acquisition *acq)
 {
 	OScDev_Error err;
 
 	uint16_t firstX, firstY;
 	OScDev_Log_Debug(device, "Writing waveform...");
-	if (OScDev_CHECK(err, WriteWaveforms(device, &firstX, &firstY)))
+	if (OScDev_CHECK(err, WriteWaveforms(device, acq, &firstX, &firstY)))
 		return err;
 
 	OScDev_Log_Debug(device, "Moving galvos to start position...");
@@ -435,10 +430,10 @@ OScDev_Error SetBuildInParameters(OScDev_Device *device)
 	return OScDev_OK;
 }
 
-OScDev_Error SetPixelParameters(OScDev_Device *device, double scanRate)
+OScDev_Error SetPixelParameters(OScDev_Device *device, double pixelRateHz)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
-	double pixelTime = 40.0 * 1000.0 / scanRate;
+	double pixelTime = 40e6 / pixelRateHz;
 	int32_t pixelTimeTicks = (int32_t)round(pixelTime);
 	NiFpga_Status stat = NiFpga_WriteI32(session,
 		NiFpga_OpenScanFPGAHost_ControlI32_Pixeltimetick, pixelTimeTicks);
@@ -607,104 +602,13 @@ static OScDev_Error StopScan(OScDev_Device *device)
 	if (OScDev_CHECK(err, WaitTillIdle(device)))
 		return err;
 
-	/*OScDev_Log_Debug(device, "Cleaning Fifo...");
-	if (OScDev_CHECK(err, CleanFifo(device))) {TODO}
-	if (OScDev_CHECK(err, WaitTillIdle(device))) {TODO}*/
-
-	return OScDev_OK;
-}
-
-static OScDev_Error CleanFifo(OScDev_Device *device)
-{
-	NiFpga_Session session = GetData(device)->niFpgaSession;
-
-	uint32_t resolution = GetData(device)->resolution;
-	size_t nPixels = resolution * resolution;
-
-	uint32_t *clean = malloc(sizeof(uint32_t) * nPixels * 4);
-	size_t readSoFar = 0;
-	size_t available = 0;
-	size_t remaining = 0;
-
-	do
-	{
-		NiFpga_Status stat = NiFpga_ReadFifoU32(session,
-			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1,
-			clean + readSoFar, 0, -1, &available);
-		if (NiFpga_IsError(stat))
-			return stat;
-		stat = NiFpga_ReadFifoU32(session,
-			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettohostFIFO1,
-			clean + readSoFar, available, -1, &remaining);
-		if (NiFpga_IsError(stat))
-			return stat;
-		readSoFar += available;
-	} while (available != 0);
-
-	clean = 0;
-	readSoFar = 0;
-	available = 0;
-	remaining = 0;
-	do
-	{
-		NiFpga_Status stat = NiFpga_ReadFifoU32(session,
-			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO2,
-			clean + readSoFar, 0, -1, &available);
-		if (NiFpga_IsError(stat))
-			return stat;
-		stat = NiFpga_ReadFifoU32(session,
-			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO2,
-			clean + readSoFar, available, -1, &remaining);
-		if (NiFpga_IsError(stat))
-			return stat;
-		readSoFar += available;
-	} while (available != 0);
-
-	clean = 0;
-	readSoFar = 0;
-	available = 0;
-	remaining = 0;
-	do
-	{
-		NiFpga_Status stat = NiFpga_ReadFifoU32(session,
-			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO3,
-			clean + readSoFar, 0, -1, &available);
-		if (NiFpga_IsError(stat))
-			return stat;
-		stat = NiFpga_ReadFifoU32(session,
-			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO3,
-			clean + readSoFar, available, -1, &remaining);
-		if (NiFpga_IsError(stat))
-			return stat;
-		readSoFar += available;
-	} while (available != 0);
-
-	clean = 0;
-	readSoFar = 0;
-	available = 0;
-	remaining = 0;
-	do
-	{
-		NiFpga_Status stat = NiFpga_ReadFifoU32(session,
-			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO4,
-			clean + readSoFar, 0, -1, &available);
-		if (NiFpga_IsError(stat))
-			return stat;
-		stat = NiFpga_ReadFifoU32(session,
-			NiFpga_OpenScanFPGAHost_TargetToHostFifoU32_TargettoHostFIFO4,
-			clean + readSoFar, available, -1, &remaining);
-		if (NiFpga_IsError(stat))
-			return stat;
-		readSoFar += available;
-	} while (available != 0);
-
 	return OScDev_OK;
 }
 
 
 static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bool discard)
 {
-	uint32_t resolution = GetData(device)->resolution;
+	uint32_t resolution = OScDev_Acquisition_GetResolution(acq);
 	size_t nPixels = resolution * resolution;
 	uint32_t* rawAndAveraged = malloc(sizeof(uint32_t) * nPixels);
 	uint32_t* rawAndAveraged2 = malloc(sizeof(uint32_t) * nPixels);
@@ -757,10 +661,11 @@ static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bo
 		size_t available4 = 0;
 		size_t remaining4 = 0;
 
-		uint32_t elementsPerLine = GetData(device)->lineDelay + GetData(device)->resolution + X_RETRACE_LEN;
-		uint32_t scanLines = GetData(device)->resolution;
-		uint32_t yLen = GetData(device)->resolution + Y_RETRACE_LEN;
-		uint32_t estFrameTimeMs = (uint32_t)(elementsPerLine * yLen / GetData(device)->scanRate);
+		uint32_t elementsPerLine = GetData(device)->lineDelay + resolution + X_RETRACE_LEN;
+		uint32_t scanLines = resolution;
+		uint32_t yLen = resolution + Y_RETRACE_LEN;
+		double pixelRatekHz = 1e-3 * OScDev_Acquisition_GetPixelRate(acq);
+		uint32_t estFrameTimeMs = (uint32_t)(elementsPerLine * yLen / pixelRatekHz);
 		char msg[OScDev_MAX_STR_LEN + 1];
 		snprintf(msg, OScDev_MAX_STR_LEN, "Estimated time per frame: %d (msec)", estFrameTimeMs);
 		OScDev_Log_Debug(device, msg);
@@ -1064,10 +969,7 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 	OScDev_Device *device = (OScDev_Device *)param;
 	OScDev_Acquisition *acq = GetData(device)->acquisition.acquisition;
 
-	OScDev_Error err;
-	uint32_t acqNumFrames;
-	if (OScDev_CHECK(err, OScDev_Acquisition_GetNumberOfFrames(acq, &acqNumFrames)))
-		return err;
+	uint32_t acqNumFrames = OScDev_Acquisition_GetNumberOfFrames(acq);
 
 	int totalFrames;
 	int thisFrame;
@@ -1076,6 +978,7 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 	else
 		totalFrames = acqNumFrames * GetData(device)->kalmanFrames;
 
+	OScDev_Error err;
 	if (OScDev_CHECK(err, SetTaskParameters(device, totalFrames)))
 		return err;
 	if (OScDev_CHECK(err, WaitTillIdle(device)))

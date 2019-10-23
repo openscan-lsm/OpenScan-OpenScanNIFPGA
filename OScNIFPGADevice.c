@@ -1,30 +1,12 @@
 #include "OScNIFPGADevicePrivate.h"
 #include "OScNIFPGA.h"
 
-
-
-static OScDev_Device **g_devices;
-static size_t g_deviceCount;
-static uint32_t n;
+#include <math.h>
 
 
 static OScDev_Error NIFPGAGetModelName(const char **name)
 {
 	*name = "OpenScan-NIFPGA";
-	return OScDev_OK;
-}
-
-
-static OScDev_Error NIFPGAGetInstances(OScDev_Device ***devices, size_t *count)
-{
-	if (!g_devices)
-	{
-		OScDev_Error err;
-		if (OScDev_CHECK(err, EnumerateInstances(&g_devices, &g_deviceCount)))
-			return err;
-	}
-	*devices = g_devices;
-	*count = g_deviceCount;
 	return OScDev_OK;
 }
 
@@ -83,69 +65,57 @@ static OScDev_Error NIFPGAHasDetector(OScDev_Device *device, bool *hasDetector)
 }
 
 
-static OScDev_Error NIFPGAGetSettings(OScDev_Device *device, OScDev_Setting ***settings, size_t *count)
+static OScDev_Error GetPixelRates(OScDev_Device *device, OScDev_NumRange **pixelRatesHz)
 {
-	OScDev_Error err;
-	if (OScDev_CHECK(err, PrepareSettings(device)))
-		return err;
-	*settings = GetData(device)->settings;
-	*count = GetData(device)->settingCount;
-	return OScDev_OK;
-}
-
-
-static OScDev_Error NIFPGAGetAllowedResolutions(OScDev_Device *device, size_t **widths, size_t **heights, size_t *count)
-{
-	static size_t resolutions[] = {
-		256, 512, 1024, 2048,
+	// TODO There should be a comment here explaining how these values were chosen
+	// (factors of 1.2 MHz???)
+	static const double ratesHz[] = {
+		100,
+		200,
+		250,
+		500,
+		1000,
+		2500,
+		5000,
+		7500,
+		10000,
+		12500,
+		15000,
+		20000,
+		25000,
+		30000,
+		40000,
+		50000,
+		60000,
+		80000,
+		100000,
+		125000,
+		150000,
+		200000,
+		250000,
+		300000,
+		350000,
+		400000,
+		500000,
+		NAN // End mark
 	};
-	*widths = *heights = resolutions;
-	*count = sizeof(resolutions) / sizeof(size_t);
+	*pixelRatesHz = OScDev_NumRange_CreateDiscreteFromNaNTerminated(ratesHz);
 	return OScDev_OK;
 }
 
 
-static OScDev_Error NIFPGAGetResolution(OScDev_Device *device, size_t *width, size_t *height)
+static OScDev_Error GetResolutions(OScDev_Device *device, OScDev_NumRange **resolutions)
 {
-	*width = *height = GetData(device)->resolution;
+	*resolutions = OScDev_NumRange_CreateDiscreteFromNaNTerminated((double[]) {
+		256, 512, 1024, 2048, NAN
+	});
 	return OScDev_OK;
 }
 
 
-static OScDev_Error NIFPGASetResolution(OScDev_Device *device, size_t width, size_t height)
+static OScDev_Error GetZoomFactors(OScDev_Device *device, OScDev_NumRange **zooms)
 {
-	if (width == GetData(device)->resolution)
-		return OScDev_OK;
-	GetData(device)->resolution = (uint32_t)width;
-	GetData(device)->settingsChanged = true;
-	GetData(device)->reloadWaveformRequired = true;
-
-	GetData(device)->magnification = (double)width / OSc_DEFAULT_RESOLUTION * GetData(device)->zoom / OSc_DEFAULT_ZOOM;
-
-	return OScDev_OK;
-}
-
-static OScDev_Error NIFPGAGetMagnification(OScDev_Device *device, double *magnification)
-{
-	*magnification = GetData(device)->magnification;
-	return OScDev_OK;
-}
-
-static OScDev_Error NIFPGASetMagnification(OScDev_Device *device)
-{
-	size_t resolution = GetData(device)->resolution;
-	double zoom = GetData(device)->zoom;
-	GetData(device)->magnification = (double)(resolution / OSc_DEFAULT_RESOLUTION) * (zoom / OSc_DEFAULT_ZOOM);
-	
-	return OScDev_OK;
-}
-
-
-
-static OScDev_Error NIFPGAGetImageSize(OScDev_Device *device, uint32_t *width, uint32_t *height)
-{
-	*width = GetData(device)->resolution;
-	*height = GetData(device)->resolution;
+	*zooms = OScDev_NumRange_CreateContinuous(0.5, 40.0);
 	return OScDev_OK;
 }
 
@@ -173,7 +143,7 @@ static OScDev_Error NIFPGAGetNumberOfChannels(OScDev_Device *device, uint32_t *n
 
 static OScDev_Error NIFPGAGetBytesPerSample(OScDev_Device *device, uint32_t *bytesPerSample)
 {
-	*bytesPerSample = 2; // chaneg from 2 (16 bit) to 1 (8 bit)
+	*bytesPerSample = 2;
 	return OScDev_OK;
 }
 
@@ -189,34 +159,19 @@ static OScDev_Error NIFPGAArm(OScDev_Device *device, OScDev_Acquisition *acq)
 	if (!useClock || !useScanner)
 		return OScDev_Error_Unsupported_Operation;
 
-	enum OScDev_TriggerSource clockStartTriggerSource;
+	OScDev_TriggerSource clockStartTriggerSource;
 	OScDev_Acquisition_GetClockStartTriggerSource(acq, &clockStartTriggerSource);
 	if (clockStartTriggerSource != OScDev_TriggerSource_Software)
 		return OScDev_Error_Unsupported_Operation;
 
-	enum OScDev_ClockSource clockSource;
+	OScDev_ClockSource clockSource;
 	OScDev_Acquisition_GetClockSource(acq, &clockSource);
 	if (clockSource != OScDev_ClockSource_Internal)
 		return OScDev_Error_Unsupported_Operation;
 	// what if we use external line clock to trigger acquisition?
 
-	if (useDetector)
-	{
-		// arm scanner/clock and detector
-		GetData(device)->detectorEnabled = true;
-	}
-	else
-	{
-		// arm scanner and clock and disable detector
-		GetData(device)->detectorEnabled = false;
-	}
-
-	if (useScanner)
-	{
-		GetData(device)->scannerEnabled = true;
-	}
-	else
-		GetData(device)->scannerEnabled = false;
+	GetData(device)->detectorEnabled = useDetector;
+	GetData(device)->scannerEnabled = useScanner;
 	
 	EnterCriticalSection(&(GetData(device)->acquisition.mutex));
 	{
@@ -239,6 +194,21 @@ static OScDev_Error NIFPGAArm(OScDev_Device *device, OScDev_Acquisition *acq)
 	}
 	LeaveCriticalSection(&(GetData(device)->acquisition.mutex));
 
+	double pixelRateHz = OScDev_Acquisition_GetPixelRate(acq);
+	uint32_t resolution = OScDev_Acquisition_GetResolution(acq);
+	double zoomFactor = OScDev_Acquisition_GetZoomFactor(acq);
+	if (pixelRateHz != GetData(device)->lastAcquisitionPixelRateHz ||
+		resolution != GetData(device)->lastAcquisitionResolution ||
+		zoomFactor != GetData(device)->lastAcquisitionZoomFactor) {
+		GetData(device)->settingsChanged = true;
+	}
+	if (resolution != GetData(device)->lastAcquisitionResolution ||
+		zoomFactor != GetData(device)->lastAcquisitionZoomFactor) {
+		GetData(device)->reloadWaveformRequired = true;
+	}
+
+	uint32_t nFrames = OScDev_Acquisition_GetNumberOfFrames(acq);
+
 	if (GetData(device)->settingsChanged)
 	{
 		OScDev_Error err;
@@ -254,15 +224,15 @@ static OScDev_Error NIFPGAArm(OScDev_Device *device, OScDev_Acquisition *acq)
 		OScDev_Log_Debug(device, "1. Setting parameters...");
 		if (OScDev_CHECK(err, SetBuildInParameters(device)))
 			return err;
-		if (OScDev_CHECK(err, SetPixelParameters(device, GetData(device)->scanRate)))
+		if (OScDev_CHECK(err, SetPixelParameters(device, pixelRateHz)))
 			return err;
 
 		OScDev_Log_Debug(device, "2. Clean flags...");
 		if (OScDev_CHECK(err, Cleanflags(device)))
 			return err;
-		if (OScDev_CHECK(err, SetResolutionParameters(device, GetData(device)->resolution)))
+		if (OScDev_CHECK(err, SetResolutionParameters(device, resolution)))
 			return err;
-		if (OScDev_CHECK(err, SetTaskParameters(device, GetData(device)->nFrames)))
+		if (OScDev_CHECK(err, SetTaskParameters(device, nFrames)))
 			return err;
 
 		OScDev_Log_Debug(device, "3. Cleaning FPGA DRAM and initializing globals...");
@@ -273,7 +243,7 @@ static OScDev_Error NIFPGAArm(OScDev_Device *device, OScDev_Acquisition *acq)
 
 		if (GetData(device)->reloadWaveformRequired)
 		{
-			if (OScDev_CHECK(err, ReloadWaveform(device)))
+			if (OScDev_CHECK(err, ReloadWaveform(device, acq)))
 				return err;
 			if (OScDev_CHECK(err, WaitTillIdle(device)))
 				return err;
@@ -339,9 +309,9 @@ static OScDev_Error NIFPGAWait(OScDev_Device *device)
 }
 
 
-struct OScDev_DeviceImpl OpenScan_NIFPGA_Device_Impl = {
+OScDev_DeviceImpl OpenScan_NIFPGA_Device_Impl = {
 	.GetModelName = NIFPGAGetModelName,
-	.GetInstances = NIFPGAGetInstances,
+	.EnumerateInstances = EnumerateInstances,
 	.ReleaseInstance = NIFPGAReleaseInstance,
 	.GetName = NIFPGAGetName,
 	.Open = NIFPGAOpen,
@@ -349,13 +319,12 @@ struct OScDev_DeviceImpl OpenScan_NIFPGA_Device_Impl = {
 	.HasClock = NIFPGAHasClock,
 	.HasScanner = NIFPGAHasScanner,
 	.HasDetector = NIFPGAHasDetector,
-	.GetSettings = NIFPGAGetSettings,
-	.GetAllowedResolutions = NIFPGAGetAllowedResolutions,
-	.GetResolution = NIFPGAGetResolution,
-	.SetResolution = NIFPGASetResolution,
-	.GetMagnification = NIFPGAGetMagnification,
-	.SetMagnification = NIFPGASetMagnification,
-	.GetImageSize = NIFPGAGetImageSize,
+	.MakeSettings = MakeSettings,
+	.GetPixelRates = GetPixelRates,
+	.GetResolutions = GetResolutions,
+	.GetZoomFactors = GetZoomFactors,
+	.GetRasterWidths = GetResolutions, // No ROI support
+	.GetRasterHeights = GetResolutions, // No ROI support
 	.GetNumberOfChannels = NIFPGAGetNumberOfChannels,
 	.GetBytesPerSample = NIFPGAGetBytesPerSample,
 	.Arm = NIFPGAArm,
@@ -366,13 +335,10 @@ struct OScDev_DeviceImpl OpenScan_NIFPGA_Device_Impl = {
 };
 
 
-static OScDev_Error GetDeviceImpls(struct OScDev_DeviceImpl **impls, size_t *implCount)
+static OScDev_Error GetDeviceImpls(OScDev_PtrArray **deviceImpls)
 {
-	if (*implCount < 1)
-		return OScDev_OK;
-
-	impls[0] = &OpenScan_NIFPGA_Device_Impl;
-	*implCount = 1;
+	*deviceImpls = OScDev_PtrArray_Create();
+	OScDev_PtrArray_Append(*deviceImpls, &OpenScan_NIFPGA_Device_Impl);
 	return OScDev_OK;
 }
 

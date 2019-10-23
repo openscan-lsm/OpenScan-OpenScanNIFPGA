@@ -29,22 +29,20 @@ struct OScNIFPGAPrivateData
 	NiFpga_Session niFpgaSession;
 	char bitfile[OScDev_MAX_STR_LEN + 1];
 
-	OScDev_Setting **settings;
-	size_t settingCount;
-
+	// Remember last used to avoid unnecessary waveform reloads
+	double lastAcquisitionPixelRateHz;
+	uint32_t lastAcquisitionResolution;
+	double lastAcquisitionZoomFactor;
 	bool settingsChanged;
 	bool reloadWaveformRequired;
+
 	bool scannerEnabled;
 	bool detectorEnabled;
 
-	double scanRate;
-	uint32_t resolution;
-	double zoom;
 	// counted as number of pixels. 
     // to adjust for the lag between the mirror control signal and the actual position of the mirror
 	// scan phase (uSec) = line delay * bin factor / scan rate
 	uint32_t lineDelay;
-	double magnification; // = (resolution/512) * (zoom/1)
 	double offsetXY[2];
 
 	enum {
@@ -59,7 +57,6 @@ struct OScNIFPGAPrivateData
 	bool kalmanProgressive;
 	uint16_t filterGain;
 	uint32_t kalmanFrames;
-	uint32_t nFrames;
 
 	struct
 	{
@@ -81,4 +78,4 @@ static inline struct OScNIFPGAPrivateData *GetData(OScDev_Device *device)
 }
 
 
-OScDev_Error PrepareSettings(OScDev_Device *device);
+OScDev_Error MakeSettings(OScDev_Device *device, OScDev_PtrArray **settings);
