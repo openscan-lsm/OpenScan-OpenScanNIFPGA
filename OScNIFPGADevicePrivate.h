@@ -40,6 +40,10 @@ struct OScNIFPGAPrivateData
 	double scanRate;
 	uint32_t resolution;
 	double zoom;
+	// counted as number of pixels. 
+    // to adjust for the lag between the mirror control signal and the actual position of the mirror
+	// scan phase (uSec) = line delay * bin factor / scan rate
+	uint32_t lineDelay;
 	double magnification; // = (resolution/512) * (zoom/1)
 	double offsetXY[2];
 

@@ -44,20 +44,37 @@ static OScDev_Error SetScanRate(OScDev_Setting *setting, double value)
 }
 
 
+// unit: kHz
 static OScDev_Error GetScanRateValues(OScDev_Setting *setting, double **values, size_t *count)
 {
 	static double v[] = {
-		0.05,
-		0.08,
-		0.10,
-		0.12,
-		0.15,
-		0.20,
+		0.1,
+		0.2,
 		0.25,
-		0.30,
-		0.35,
-		0.40,
-		0.50,
+		0.5,
+		1.0,
+		2.5,
+		5.0,
+		7.5,
+		10.0,
+		12.5,
+		15.0,
+		20.0,
+		25.0,
+		30.0,
+		40.0,
+		50.0,
+		60.0,
+		80.0,
+		100.0,
+		125.0,
+		150.0,
+		200.0,
+		250.0,
+		300.0,
+		350.0,
+		400.0,
+		500.0,
 	};
 	*values = v;
 	*count = sizeof(v) / sizeof(double);
@@ -101,7 +118,7 @@ static OScDev_Error SetZoom(OScDev_Setting *setting, double value)
 
 static OScDev_Error GetZoomRange(OScDev_Setting *setting, double *min, double *max)
 {
-	*min = 1.0;
+	*min = 0.5;
 	*max = 40.0;
 	return OScDev_OK;
 }
@@ -112,6 +129,41 @@ static struct OScDev_SettingImpl SettingImpl_Zoom = {
 	.SetFloat64 = SetZoom,
 	.GetNumericConstraintType = GetNumericConstraintTypeImpl_Range,
 	.GetFloat64Range = GetZoomRange,
+};
+
+
+static OScDev_Error GetLineDelay(OScDev_Setting *setting, int32_t *value)
+{
+	*value = GetSettingDeviceData(setting)->lineDelay;
+
+	return OScDev_OK;
+}
+
+
+static OScDev_Error SetLineDelay(OScDev_Setting *setting, int32_t value)
+{
+	GetSettingDeviceData(setting)->lineDelay = value;
+
+	GetSettingDeviceData(setting)->settingsChanged = true;
+	GetSettingDeviceData(setting)->reloadWaveformRequired = true;
+
+	return OScDev_OK;
+}
+
+
+static OScDev_Error GetLineDelayRange(OScDev_Setting *setting, int32_t *min, int32_t *max)
+{
+	*min = 1;
+	*max = 200;
+	return OScDev_OK;
+}
+
+
+static struct OScDev_SettingImpl SettingImpl_LineDelay = {
+	.GetInt32 = GetLineDelay,
+	.SetInt32 = SetLineDelay,
+	.GetNumericConstraintType = GetNumericConstraintTypeImpl_Range,
+	.GetInt32Range = GetLineDelayRange,
 };
 
 
@@ -369,6 +421,11 @@ OScDev_Error PrepareSettings(OScDev_Device *device)
 		OScDev_ValueType_Float64, &SettingImpl_Zoom, device)))
 		return err;
 
+	OScDev_Setting *lineDelay;
+	if (OScDev_CHECK(err, OScDev_Setting_Create(&lineDelay, "Line Delay (pixels)", OScDev_ValueType_Int32,
+		&SettingImpl_LineDelay, device)))
+		return err;
+
 	OScDev_Setting *offsets[2];
 	for (int i = 0; i < 2; ++i)
 	{
@@ -414,7 +471,7 @@ OScDev_Error PrepareSettings(OScDev_Device *device)
 		return err;
 
 	OScDev_Setting *ss[] = {
-		scanRate, zoom, offsets[0], offsets[1],
+		scanRate, zoom, lineDelay, offsets[0], offsets[1],
 		channels, kalmanProgressive, scannerEnabled, detectorEnabled, filterGain, kalmanFrames,
 	};
 	size_t nSettings = sizeof(ss) / sizeof(OScDev_Setting *);
