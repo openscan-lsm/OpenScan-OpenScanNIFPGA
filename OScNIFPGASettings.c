@@ -15,121 +15,11 @@ static inline struct OScNIFPGAPrivateData *GetSettingDeviceData(OScDev_Setting *
 }
 
 
-OScDev_Error GetNumericConstraintTypeImpl_DiscreteValues(OScDev_Setting *setting, enum OScDev_ValueConstraint *constraintType)
-{
-	*constraintType = OScDev_ValueConstraint_DiscreteValues;
-	return OScDev_OK;
-}
-
-
-OScDev_Error GetNumericConstraintTypeImpl_Range(OScDev_Setting *setting, enum OScDev_ValueConstraint *constraintType)
+static OScDev_Error GetNumericConstraintTypeImpl_Range(OScDev_Setting *setting, OScDev_ValueConstraint *constraintType)
 {
 	*constraintType = OScDev_ValueConstraint_Range;
 	return OScDev_OK;
 }
-
-
-static OScDev_Error GetScanRate(OScDev_Setting *setting, double *value)
-{
-	*value = GetSettingDeviceData(setting)->scanRate;
-	return OScDev_OK;
-}
-
-
-static OScDev_Error SetScanRate(OScDev_Setting *setting, double value)
-{
-	GetSettingDeviceData(setting)->scanRate = value;
-	GetSettingDeviceData(setting)->settingsChanged = true;
-	return OScDev_OK;
-}
-
-
-// unit: kHz
-static OScDev_Error GetScanRateValues(OScDev_Setting *setting, double **values, size_t *count)
-{
-	static double v[] = {
-		0.1,
-		0.2,
-		0.25,
-		0.5,
-		1.0,
-		2.5,
-		5.0,
-		7.5,
-		10.0,
-		12.5,
-		15.0,
-		20.0,
-		25.0,
-		30.0,
-		40.0,
-		50.0,
-		60.0,
-		80.0,
-		100.0,
-		125.0,
-		150.0,
-		200.0,
-		250.0,
-		300.0,
-		350.0,
-		400.0,
-		500.0,
-	};
-	*values = v;
-	*count = sizeof(v) / sizeof(double);
-	return OScDev_OK;
-}
-
-
-static struct OScDev_SettingImpl SettingImpl_ScanRate = {
-	.GetFloat64 = GetScanRate,
-	.SetFloat64 = SetScanRate,
-	.GetNumericConstraintType = GetNumericConstraintTypeImpl_DiscreteValues,
-	.GetFloat64DiscreteValues = GetScanRateValues,
-};
-
-
-static OScDev_Error GetZoom(OScDev_Setting *setting, double *value)
-{
-	*value = GetSettingDeviceData(setting)->zoom;
-	GetSettingDeviceData(setting)->magnification =
-		(double)GetSettingDeviceData(setting)->resolution / (double)OSc_DEFAULT_RESOLUTION
-		* GetSettingDeviceData(setting)->zoom / OSc_DEFAULT_ZOOM;
-
-	return OScDev_OK;
-}
-
-
-static OScDev_Error SetZoom(OScDev_Setting *setting, double value)
-{
-	GetSettingDeviceData(setting)->zoom = value;
-	GetSettingDeviceData(setting)->settingsChanged = true;
-	GetSettingDeviceData(setting)->reloadWaveformRequired = true;
-
-// reflect the change to magnification as well
-	GetSettingDeviceData(setting)->magnification =
-	(double)GetSettingDeviceData(setting)->resolution / (double)OSc_DEFAULT_RESOLUTION
-		* value / OSc_DEFAULT_ZOOM;
-
-	return OScDev_OK;
-}
-
-
-static OScDev_Error GetZoomRange(OScDev_Setting *setting, double *min, double *max)
-{
-	*min = 0.5;
-	*max = 40.0;
-	return OScDev_OK;
-}
-
-
-static struct OScDev_SettingImpl SettingImpl_Zoom = {
-	.GetFloat64 = GetZoom,
-	.SetFloat64 = SetZoom,
-	.GetNumericConstraintType = GetNumericConstraintTypeImpl_Range,
-	.GetFloat64Range = GetZoomRange,
-};
 
 
 static OScDev_Error GetLineDelay(OScDev_Setting *setting, int32_t *value)
@@ -203,11 +93,19 @@ static OScDev_Error GetOffsetRange(OScDev_Setting *setting, double *min, double 
 }
 
 
-static struct OScDev_SettingImpl SettingImpl_Offset = {
+static void ReleaseOffset(OScDev_Setting *setting)
+{
+	struct OffsetSettingData *data = OScDev_Setting_GetImplData(setting);
+	free(data);
+}
+
+
+static OScDev_SettingImpl SettingImpl_Offset = {
 	.GetFloat64 = GetOffset,
 	.SetFloat64 = SetOffset,
 	.GetNumericConstraintType = GetNumericConstraintTypeImpl_Range,
 	.GetFloat64Range = GetOffsetRange,
+	.Release = ReleaseOffset,
 };
 
 
@@ -272,7 +170,7 @@ static OScDev_Error GetChannelsValueForName(OScDev_Setting *setting, uint32_t *v
 }
 
 
-static struct OScDev_SettingImpl SettingImpl_Channels = {
+static OScDev_SettingImpl SettingImpl_Channels = {
 	.GetEnum = GetChannels,
 	.SetEnum = SetChannels,
 	.GetEnumNumValues = GetChannelsNumValues,
@@ -295,7 +193,7 @@ static OScDev_Error SetKalmanProgressive(OScDev_Setting *setting, bool value)
 }
 
 
-static struct OScDev_SettingImpl SettingImpl_KalmanProgressive = {
+static OScDev_SettingImpl SettingImpl_KalmanProgressive = {
 	.GetBool = GetKalmanProgressive,
 	.SetBool = SetKalmanProgressive,
 };
@@ -316,7 +214,7 @@ static OScDev_Error SetScannerEnabled(OScDev_Setting *setting, bool value)
 }
 
 
-static struct OScDev_SettingImpl SettingImpl_ScannerEnabled = {
+static OScDev_SettingImpl SettingImpl_ScannerEnabled = {
 	.GetBool = GetScannerEnabled,
 	.SetBool = SetScannerEnabled,
 };
@@ -337,7 +235,7 @@ static OScDev_Error SetDetectorEnabled(OScDev_Setting *setting, bool value)
 }
 
 
-static struct OScDev_SettingImpl SettingImpl_DetectorEnabled = {
+static OScDev_SettingImpl SettingImpl_DetectorEnabled = {
 	.GetBool = GetDetectorEnabled,
 	.SetBool = SetDetectorEnabled,
 };
@@ -365,7 +263,7 @@ static OScDev_Error GetFilterGainRange(OScDev_Setting *setting, double *min, dou
 }
 
 
-static struct OScDev_SettingImpl SettingImpl_FilterGain = {
+static OScDev_SettingImpl SettingImpl_FilterGain = {
 	.GetFloat64 = GetFilterGain,
 	.SetFloat64 = SetFilterGain,
 	.GetNumericConstraintType = GetNumericConstraintTypeImpl_Range,
@@ -396,7 +294,7 @@ static OScDev_Error GetKalmanFramesRange(OScDev_Setting *setting, int32_t *min, 
 }
 
 
-static struct OScDev_SettingImpl SettingImpl_KalmanFrames = {
+static OScDev_SettingImpl SettingImpl_KalmanFrames = {
 	.GetInt32 = GetKalmanFrames,
 	.SetInt32 = SetKalmanFrames,
 	.GetNumericConstraintType = GetNumericConstraintTypeImpl_Range,
@@ -404,81 +302,73 @@ static struct OScDev_SettingImpl SettingImpl_KalmanFrames = {
 };
 
 
-OScDev_Error PrepareSettings(OScDev_Device *device)
+OScDev_Error MakeSettings(OScDev_Device *device, OScDev_PtrArray **settings)
 {
-	if (GetData(device)->settings)
-		return OScDev_OK;
-
 	OScDev_Error err;
-
-	OScDev_Setting *scanRate;
-	if (OScDev_CHECK(err, OScDev_Setting_Create(&scanRate, "ScanRate",
-		OScDev_ValueType_Float64, &SettingImpl_ScanRate, device)))
-		return err;
-
-	OScDev_Setting *zoom;
-	if (OScDev_CHECK(err, OScDev_Setting_Create(&zoom, "Zoom",
-		OScDev_ValueType_Float64, &SettingImpl_Zoom, device)))
-		return err;
+	*settings = OScDev_PtrArray_Create();
 
 	OScDev_Setting *lineDelay;
 	if (OScDev_CHECK(err, OScDev_Setting_Create(&lineDelay, "Line Delay (pixels)", OScDev_ValueType_Int32,
 		&SettingImpl_LineDelay, device)))
-		return err;
+		goto error;
+	OScDev_PtrArray_Append(*settings, lineDelay);
 
-	OScDev_Setting *offsets[2];
 	for (int i = 0; i < 2; ++i)
 	{
-		// TODO We currently never free the OffsetSettingData allocated here.
-		// Call free() once OpenScanDeviceLib supports a method to release setting data.
+		OScDev_Setting *offset;
 		struct OffsetSettingData *data = malloc(sizeof(struct OffsetSettingData));
 		data->device = device;
 		data->axis = i;
 		const char *name = i == 0 ? "GalvoOffsetX" : "GalvoOffsetY";
-		if (OScDev_CHECK(err, OScDev_Setting_Create(&offsets[i], name,
+		if (OScDev_CHECK(err, OScDev_Setting_Create(&offset, name,
 			OScDev_ValueType_Float64, &SettingImpl_Offset, data)))
-			return err;
+			goto error;
+		OScDev_PtrArray_Append(*settings, offset);
 	}
 
 	OScDev_Setting *channels;
 	if (OScDev_CHECK(err, OScDev_Setting_Create(&channels, "Channels",
 		OScDev_ValueType_Enum, &SettingImpl_Channels, device)))
-		return err;
+		goto error;
+	OScDev_PtrArray_Append(*settings, channels);
 
 	OScDev_Setting *kalmanProgressive;
 	if (OScDev_CHECK(err, OScDev_Setting_Create(&kalmanProgressive,
 		"KalmanAveragingProgressive", OScDev_ValueType_Bool, &SettingImpl_KalmanProgressive, device)))
-		return err;
+		goto error;
+	OScDev_PtrArray_Append(*settings, kalmanProgressive);
 
 	OScDev_Setting *scannerEnabled;
 	if (OScDev_CHECK(err, OScDev_Setting_Create(&scannerEnabled,
 		"EnableScanner", OScDev_ValueType_Bool, &SettingImpl_ScannerEnabled, device)))
-		return err;
+		goto error;
+	OScDev_PtrArray_Append(*settings, scannerEnabled);
 
 	OScDev_Setting *detectorEnabled;
 	if (OScDev_CHECK(err, OScDev_Setting_Create(&detectorEnabled,
 		"EnableDetector", OScDev_ValueType_Bool, &SettingImpl_DetectorEnabled, device)))
-		return err;
+		goto error;
+	OScDev_PtrArray_Append(*settings, detectorEnabled);
 
 	OScDev_Setting *filterGain;
 	if (OScDev_CHECK(err, OScDev_Setting_Create(&filterGain,
 		"KalmanAveragingFilterGain", OScDev_ValueType_Float64, &SettingImpl_FilterGain, device)))
-		return err;
+		goto error;
+	OScDev_PtrArray_Append(*settings, filterGain);
 
 	OScDev_Setting *kalmanFrames;
 	if (OScDev_CHECK(err, OScDev_Setting_Create(&kalmanFrames,
 		"KalmanAverageFrames", OScDev_ValueType_Int32, &SettingImpl_KalmanFrames, device)))
-		return err;
+		goto error;
+	OScDev_PtrArray_Append(*settings, kalmanFrames);
 
-	OScDev_Setting *ss[] = {
-		scanRate, zoom, lineDelay, offsets[0], offsets[1],
-		channels, kalmanProgressive, scannerEnabled, detectorEnabled, filterGain, kalmanFrames,
-	};
-	size_t nSettings = sizeof(ss) / sizeof(OScDev_Setting *);
-	OScDev_Setting **settings = malloc(sizeof(ss));
-	memcpy(settings, ss, sizeof(ss));
-
-	GetData(device)->settings = settings;
-	GetData(device)->settingCount = nSettings;
 	return OScDev_OK;
+
+error:
+	for (size_t i = 0; i < OScDev_PtrArray_Size(*settings); ++i) {
+		OScDev_Setting_Destroy(OScDev_PtrArray_At(*settings, i));
+	}
+	OScDev_PtrArray_Destroy(*settings);
+	*settings = NULL;
+	return err;
 }
