@@ -60,11 +60,11 @@ static void PopulateDefaultParameters(struct OScNIFPGAPrivateData *data)
 	data->lineDelay = 50;
 	data->offsetXY[0] = data->offsetXY[1] = 0.0;
 	data->channels = CHANNELS_1_;
-	data->kalmanProgressive = true;
+	data->useProgressiveAveraging = true;
 	data->detectorEnabled = true;
 	data->scannerEnabled = true;
 	data->filterGain = 0.99; // TODO This is probably wrong; see also SetScanParameters
-	data->kalmanFrames = 1;
+	data->framesToAverage = 1;
 
 	InitializeCriticalSection(&(data->acquisition.mutex));
 	data->acquisition.thread = NULL;
@@ -291,7 +291,7 @@ OScDev_Error InitScan(OScDev_Device *device)
 }
 
 
-static OScDev_Error SetKalmanGain(OScDev_Device *device, double kg)
+static OScDev_Error SetAveragingFilterGain(OScDev_Device *device, double kg)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 	return OScDev_OK;
@@ -502,15 +502,19 @@ OScDev_Error SetTaskParameters(OScDev_Device *device, uint32_t nf)
 {
 	NiFpga_Session session = GetData(device)->niFpgaSession;
 	uint16_t filtergain_ = 65534;
+
 	NiFpga_Status stat = NiFpga_WriteI32(session,
 		NiFpga_OpenScanFPGAHost_ControlI32_Numberofframes, nf);
 	if (NiFpga_IsError(stat))
 		return stat;
-	//need to set kalman factor
+
+	// The FPGA firmware register is called "Kalmanfacotr", but its
+	// functionality is regular averaging.
 	stat = NiFpga_WriteU16(session,
-		NiFpga_OpenScanFPGAHost_ControlU16_Kalmanfactor, GetData(device)->kalmanFrames);
+		NiFpga_OpenScanFPGAHost_ControlU16_Kalmanfactor, GetData(device)->framesToAverage);
 	if (NiFpga_IsError(stat))
 		return stat;
+
 	stat = NiFpga_WriteU16(session,
 		NiFpga_OpenScanFPGAHost_ControlU16_Filtergain, filtergain_);
 	if (NiFpga_IsError(stat))
@@ -872,16 +876,16 @@ static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bo
 
 	if (!discard)
 	{
-		uint16_t *kalmanBuffer = malloc(sizeof(uint16_t) * nPixels);
-		uint16_t *kalmanBuffer2 = malloc(sizeof(uint16_t) * nPixels);
-		uint16_t *kalmanBuffer3 = malloc(sizeof(uint16_t) * nPixels);
-		uint16_t *kalmanBuffer4 = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *averagedBuffer = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *averagedBuffer2 = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *averagedBuffer3 = malloc(sizeof(uint16_t) * nPixels);
+		uint16_t *averagedBuffer4 = malloc(sizeof(uint16_t) * nPixels);
 
 		for (size_t i = 0; i < nPixels; ++i) {
-			kalmanBuffer[i] = (uint16_t)(rawAndAveraged[i] >> 16);
-			kalmanBuffer2[i] = (uint16_t)(rawAndAveraged2[i] >> 16);
-			kalmanBuffer3[i] = (uint16_t)(rawAndAveraged3[i] >> 16);
-			kalmanBuffer4[i] = (uint16_t)(rawAndAveraged4[i] >> 16);
+			averagedBuffer[i] = (uint16_t)(rawAndAveraged[i] >> 16);
+			averagedBuffer2[i] = (uint16_t)(rawAndAveraged2[i] >> 16);
+			averagedBuffer3[i] = (uint16_t)(rawAndAveraged3[i] >> 16);
+			averagedBuffer4[i] = (uint16_t)(rawAndAveraged4[i] >> 16);
 		}
 
 		bool shouldContinue;
@@ -891,33 +895,33 @@ static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bo
 		switch (GetData(device)->channels)
 		{
 		case CHANNELS_1_:
-			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer);
+			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, averagedBuffer);
 			break;
 
 		case CHANNELS_2_:
-			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
-				OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2);
+			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, averagedBuffer) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 1, averagedBuffer2);
 			break;
 
 		case CHANNELS_3_:
-			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
-				OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
-				OScDev_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3);
+			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, averagedBuffer) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 1, averagedBuffer2) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 2, averagedBuffer3);
 			break;
 
 		case CHANNELS_4_:
 		default: // TODO Why is default 4?
-			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, kalmanBuffer) &&
-				OScDev_Acquisition_CallFrameCallback(acq, 1, kalmanBuffer2) &&
-				OScDev_Acquisition_CallFrameCallback(acq, 2, kalmanBuffer3) &&
-				OScDev_Acquisition_CallFrameCallback(acq, 3, kalmanBuffer4);
+			shouldContinue = OScDev_Acquisition_CallFrameCallback(acq, 0, averagedBuffer) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 1, averagedBuffer2) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 2, averagedBuffer3) &&
+				OScDev_Acquisition_CallFrameCallback(acq, 3, averagedBuffer4);
 			break;
 		}
 
-		free(kalmanBuffer);
-		free(kalmanBuffer2);
-		free(kalmanBuffer3);
-		free(kalmanBuffer4);
+		free(averagedBuffer);
+		free(averagedBuffer2);
+		free(averagedBuffer3);
+		free(averagedBuffer4);
 
 		if (!shouldContinue) {
 			// TODO We should use the return value of the frame callback to halt acquisition
@@ -933,12 +937,12 @@ static OScDev_Error ReadImage(OScDev_Device *device, OScDev_Acquisition *acq, bo
 }
 
 
-static OScDev_Error AcquireFrame(OScDev_Device *device, OScDev_Acquisition *acq, unsigned kalmanCounter)
+static OScDev_Error AcquireFrame(OScDev_Device *device, OScDev_Acquisition *acq, unsigned averagingCounter)
 {
-	bool shouldKeepImage = GetData(device)->kalmanProgressive ||
-		kalmanCounter + 1 == GetData(device)->kalmanFrames;
+	bool shouldKeepImage = GetData(device)->useProgressiveAveraging ||
+		averagingCounter + 1 == GetData(device)->framesToAverage;
 
-	for (unsigned i = 0; i < GetData(device)->kalmanFrames; ++i)
+	for (unsigned i = 0; i < GetData(device)->framesToAverage; ++i)
 	{
 		char msg[OScDev_MAX_STR_LEN + 1];
 		snprintf(msg, OScDev_MAX_STR_LEN, "Image %d", i + 1);
@@ -976,7 +980,7 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 	if (acqNumFrames == INT32_MAX)
 		totalFrames = INT32_MAX;
 	else
-		totalFrames = acqNumFrames * GetData(device)->kalmanFrames;
+		totalFrames = acqNumFrames * GetData(device)->framesToAverage;
 
 	OScDev_Error err;
 	if (OScDev_CHECK(err, SetTaskParameters(device, totalFrames)))
@@ -985,7 +989,7 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 		return err;
 
 	char msg[OScDev_MAX_STR_LEN + 1];
-	snprintf(msg, OScDev_MAX_STR_LEN, "%d Kalman images", GetData(device)->kalmanFrames);
+	snprintf(msg, OScDev_MAX_STR_LEN, "%d frames averaged", GetData(device)->framesToAverage);
 	OScDev_Log_Debug(device, msg);
 
 	snprintf(msg, OScDev_MAX_STR_LEN, "%d number of frames", acqNumFrames);
@@ -1024,7 +1028,7 @@ static DWORD WINAPI AcquisitionLoop(void *param)
 
 		OScDev_Error err;
 		if (OScDev_CHECK(err,
-			AcquireFrame(device, acq, frame % GetData(device)->kalmanFrames)))
+			AcquireFrame(device, acq, frame % GetData(device)->framesToAverage)))
 		{
 			char msg[OScDev_MAX_STR_LEN + 1];
 			snprintf(msg, OScDev_MAX_STR_LEN,

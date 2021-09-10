@@ -179,23 +179,23 @@ static OScDev_SettingImpl SettingImpl_Channels = {
 };
 
 
-static OScDev_Error GetKalmanProgressive(OScDev_Setting *setting, bool *value)
+static OScDev_Error GetAveragingProgressive(OScDev_Setting *setting, bool *value)
 {
-	*value = GetSettingDeviceData(setting)->kalmanProgressive;
+	*value = GetSettingDeviceData(setting)->useProgressiveAveraging;
 	return OScDev_OK;
 }
 
 
-static OScDev_Error SetKalmanProgressive(OScDev_Setting *setting, bool value)
+static OScDev_Error SetAveragingProgressive(OScDev_Setting *setting, bool value)
 {
-	GetSettingDeviceData(setting)->kalmanProgressive = value;
+	GetSettingDeviceData(setting)->useProgressiveAveraging = value;
 	return OScDev_OK;
 }
 
 
-static OScDev_SettingImpl SettingImpl_KalmanProgressive = {
-	.GetBool = GetKalmanProgressive,
-	.SetBool = SetKalmanProgressive,
+static OScDev_SettingImpl SettingImpl_AveragingProgressive = {
+	.GetBool = GetAveragingProgressive,
+	.SetBool = SetAveragingProgressive,
 };
 
 static OScDev_Error GetScannerEnabled(OScDev_Setting *setting, bool *value)
@@ -271,22 +271,22 @@ static OScDev_SettingImpl SettingImpl_FilterGain = {
 };
 
 
-static OScDev_Error GetKalmanFrames(OScDev_Setting *setting, int32_t *value)
+static OScDev_Error GetAveragingFrameCount(OScDev_Setting *setting, int32_t *value)
 {
-	*value = GetSettingDeviceData(setting)->kalmanFrames;
+	*value = GetSettingDeviceData(setting)->framesToAverage;
 	return OScDev_OK;
 }
 
 
-static OScDev_Error SetKalmanFrames(OScDev_Setting *setting, int32_t value)
+static OScDev_Error SetAveragingFrameCount(OScDev_Setting *setting, int32_t value)
 {
-	GetSettingDeviceData(setting)->kalmanFrames = value;
+	GetSettingDeviceData(setting)->framesToAverage = value;
 	GetSettingDeviceData(setting)->settingsChanged = true;
 	return OScDev_OK;
 }
 
 
-static OScDev_Error GetKalmanFramesRange(OScDev_Setting *setting, int32_t *min, int32_t *max)
+static OScDev_Error GetAveragingFrameCountRange(OScDev_Setting *setting, int32_t *min, int32_t *max)
 {
 	*min = 1;
 	*max = 100;
@@ -294,11 +294,11 @@ static OScDev_Error GetKalmanFramesRange(OScDev_Setting *setting, int32_t *min, 
 }
 
 
-static OScDev_SettingImpl SettingImpl_KalmanFrames = {
-	.GetInt32 = GetKalmanFrames,
-	.SetInt32 = SetKalmanFrames,
+static OScDev_SettingImpl SettingImpl_AveragingFrameCount = {
+	.GetInt32 = GetAveragingFrameCount,
+	.SetInt32 = SetAveragingFrameCount,
 	.GetNumericConstraintType = GetNumericConstraintTypeImpl_Range,
-	.GetInt32Range = GetKalmanFramesRange,
+	.GetInt32Range = GetAveragingFrameCountRange,
 };
 
 
@@ -332,11 +332,11 @@ OScDev_Error MakeSettings(OScDev_Device *device, OScDev_PtrArray **settings)
 		goto error;
 	OScDev_PtrArray_Append(*settings, channels);
 
-	OScDev_Setting *kalmanProgressive;
-	if (OScDev_CHECK(err, OScDev_Setting_Create(&kalmanProgressive,
-		"KalmanAveragingProgressive", OScDev_ValueType_Bool, &SettingImpl_KalmanProgressive, device)))
+	OScDev_Setting *useProgressiveAveraging;
+	if (OScDev_CHECK(err, OScDev_Setting_Create(&useProgressiveAveraging,
+		"AveragingProgressive", OScDev_ValueType_Bool, &SettingImpl_AveragingProgressive, device)))
 		goto error;
-	OScDev_PtrArray_Append(*settings, kalmanProgressive);
+	OScDev_PtrArray_Append(*settings, useProgressiveAveraging);
 
 	OScDev_Setting *scannerEnabled;
 	if (OScDev_CHECK(err, OScDev_Setting_Create(&scannerEnabled,
@@ -352,15 +352,15 @@ OScDev_Error MakeSettings(OScDev_Device *device, OScDev_PtrArray **settings)
 
 	OScDev_Setting *filterGain;
 	if (OScDev_CHECK(err, OScDev_Setting_Create(&filterGain,
-		"KalmanAveragingFilterGain", OScDev_ValueType_Float64, &SettingImpl_FilterGain, device)))
+		"AveragingFilterGain", OScDev_ValueType_Float64, &SettingImpl_FilterGain, device)))
 		goto error;
 	OScDev_PtrArray_Append(*settings, filterGain);
 
-	OScDev_Setting *kalmanFrames;
-	if (OScDev_CHECK(err, OScDev_Setting_Create(&kalmanFrames,
-		"KalmanAverageFrames", OScDev_ValueType_Int32, &SettingImpl_KalmanFrames, device)))
+	OScDev_Setting *framesToAverage;
+	if (OScDev_CHECK(err, OScDev_Setting_Create(&framesToAverage,
+		"AveragingFrameCount", OScDev_ValueType_Int32, &SettingImpl_AveragingFrameCount, device)))
 		goto error;
-	OScDev_PtrArray_Append(*settings, kalmanFrames);
+	OScDev_PtrArray_Append(*settings, framesToAverage);
 
 	return OScDev_OK;
 

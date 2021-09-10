@@ -54,9 +54,9 @@ struct OScNIFPGAPrivateData
 		CHANNELS_NUM_VALUES
 	} channels;
 
-	bool kalmanProgressive;
+	bool useProgressiveAveraging;
 	uint16_t filterGain;
-	uint32_t kalmanFrames;
+	uint32_t framesToAverage;
 
 	struct
 	{
